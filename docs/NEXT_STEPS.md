@@ -8,7 +8,8 @@
 - Cloudflare Worker пока отвечает только на `GET /health`.
 - Начальная D1-миграция создана и локально проверена.
 - Реализованы категории, разбор текстового расхода, расчёт статистики, `source_action_key` и формат stateless-редактирования через Telegram `ForceReply`.
-- Telegram-обработчиков, D1 repository и application-слоя ещё нет.
+- D1 repository реализован и проверен интеграционными тестами на временной локальной D1.
+- Telegram-обработчиков и application-слоя ещё нет.
 - Реальные Cloudflare/Telegram аккаунты и секреты пока не нужны и не настроены.
 - `wrangler.jsonc` содержит временный нулевой `database_id`; его нужно заменить после создания удалённой D1.
 - `FinanceManagerWorkspace.code-workspace` создан пользователем и должен быть сохранён.
@@ -71,7 +72,7 @@ npm.cmd run dev
 
 ## Порядок реализации до внешних аккаунтов
 
-### 1. Реализовать D1 storage
+### 1. Реализовать D1 storage — выполнено
 
 Добавить `src/storage` только вместе с реальным кодом:
 
@@ -88,6 +89,8 @@ npm.cmd run dev
 Редактирование не должно менять `source_action_key` или `created_by`. Удаление не требует soft delete или истории.
 
 Добавить интеграционные проверки локальной D1: уникальность `source_action_key`, disabled member, сортировка истории и границы статистики.
+
+Проверка реализованного шага: `npm.cmd test` и `npm.cmd run demo:storage`. Demo должен показать `firstCreated: true`, `duplicateCreated: false`, одну запись и статистику на 2490 RSD. Удалённая Cloudflare D1 этим не проверяется.
 
 ### 2. Реализовать application-сценарии
 

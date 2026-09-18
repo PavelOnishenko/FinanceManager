@@ -17,6 +17,9 @@ npm.cmd run build
 - `npm.cmd run check` проверяет типы Worker и тестов.
 - `npm.cmd run build` собирает Worker в `dist`, но ничего не публикует.
 - `npm.cmd run dev` запускает локальный Worker. Сейчас реализован только технический адрес `http://localhost:8787/health`; Telegram-обработчики ещё не подключены.
+- `npm.cmd run demo:storage` создаёт временную локальную D1, дважды сохраняет один расход и печатает историю и статистику. В результате должны быть `firstCreated: true`, `duplicateCreated: false`, одна запись на 2490 RSD и итог статистики 2490 RSD.
+
+Реализован D1 storage для проверки участников, создания без дубликатов, истории, редактирования, удаления и статистики. Интеграционные тесты используют временную локальную D1; реальная Cloudflare D1 пока не проверялась.
 
 Технические решения описаны в [docs/TECHNICAL_DESIGN.md](docs/TECHNICAL_DESIGN.md).
 Порядок продолжения работы находится в [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md).
