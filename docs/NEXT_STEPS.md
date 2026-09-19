@@ -5,11 +5,11 @@
 ## Текущее состояние
 
 - Git-репозиторий и TypeScript-проект созданы, но первый commit ещё не сделан.
-- Cloudflare Worker пока отвечает только на `GET /health`.
+- Cloudflare Worker отвечает на `GET /health` и защищённый `POST /telegram`.
 - Начальная D1-миграция создана и локально проверена.
 - Реализованы категории, разбор текстового расхода, расчёт статистики, `source_action_key` и формат stateless-редактирования через Telegram `ForceReply`.
 - D1 repository реализован и проверен интеграционными тестами на временной локальной D1.
-- Application-слой реализован и проверен интеграционными тестами; Telegram-обработчиков ещё нет.
+- Application-слой и Telegram-обработчики реализованы и проверены локальными update fixtures; реальный Telegram ещё не проверен.
 - Реальные Cloudflare/Telegram аккаунты и секреты пока не нужны и не настроены.
 - `wrangler.jsonc` содержит временный нулевой `database_id`; его нужно заменить после создания удалённой D1.
 - `FinanceManagerWorkspace.code-workspace` создан пользователем и должен быть сохранён.
@@ -109,7 +109,7 @@ npm.cmd run dev
 
 Проверка реализованного шага: `npm.cmd test`, `npm.cmd run check`, `npm.cmd run build` и `npm.cmd run demo:application`. Demo должно показать `directCreated: true`, 15 категорий, `selectedCreated: true`, `duplicateCreated: false`, две записи и статистику предыдущего месяца на 3190 RSD. Реальные Telegram update и удалённая Cloudflare D1 этим не проверяются.
 
-### 3. Реализовать Telegram-слой
+### 3. Реализовать Telegram-слой — выполнено локально
 
 Добавить `src/telegram` и подключить grammY к Worker webhook.
 
@@ -130,6 +130,8 @@ npm.cmd run dev
 - любое callback-событие подтверждать через `answerCallbackQuery`, чтобы Telegram убрал индикатор загрузки.
 
 Форматы `callback_data` сделать короткими и централизованными, с отдельными parser/formatter и тестами. Учитывать лимит Telegram, не передавать JSON.
+
+Проверка: `npm.cmd run demo:telegram` — 26 зелёных тестов на локальной D1 с имитацией Telegram Bot API: отдельные сценарии доступа, ввода, истории, редактирования и удаления, короткий сквозной smoke-тест и ответы при ошибках. `npm.cmd test`, `npm.cmd run check`, `npm.cmd run build` проверяют весь проект. Реальный Telegram и удалённая D1 этим не проверены. Статистика за предыдущий месяц доступна через меню; навигация и календарь остаются пунктом 4.
 
 ### 4. Реализовать статистику и календарь
 

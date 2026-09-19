@@ -4,7 +4,7 @@ import
   createExpenseAfterCategorySelection,
   getExpenseHistory, 
   getPreviousMonthStatistics, 
-  submitExpenseMessage 
+  processExpenseMessage
 } from "../src/application/financeApplication";
 import { D1FinanceRepository } from "../src/storage/D1FinanceRepository";
 import { createMigratedLocalD1 } from "./createLocalD1";
@@ -17,10 +17,10 @@ try {
   const reportTime = new Date("2026-10-05T10:00:00.000Z");
   await localD1.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(telegramUserId, "Тестовый участник").execute();
   const repository = new D1FinanceRepository(localD1.DB);
-  const direct = await submitExpenseMessage(repository, {
+  const direct = await processExpenseMessage(repository, {
     telegramUserId, sourceUpdateId: 1001, text: "2490 продукты Lidl", currentTime: expenseTime
   });
-  const selection = await submitExpenseMessage(repository, {
+  const selection = await processExpenseMessage(repository, {
     telegramUserId, sourceUpdateId: 1002, text: "700", currentTime: expenseTime
   });
   const selected = await createExpenseAfterCategorySelection(repository, {

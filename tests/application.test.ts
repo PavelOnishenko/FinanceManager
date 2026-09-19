@@ -3,7 +3,7 @@ import test from "node:test";
 import { categories } from "../src/config/categories";
 import {
   ApplicationResultKind, checkAccess, createExpenseAfterCategorySelection, deleteExpense, editExpense, getExpenseDetails, getExpenseHistory,
-  getPreviousMonthStatistics, getStatisticsForRange, submitExpenseMessage
+  getPreviousMonthStatistics, getStatisticsForRange, processExpenseMessage
 } from "../src/application/financeApplication";
 import { getDateInFinanceTimeZone, getPreviousCalendarMonthRange, isValidCalendarDate } from "../src/application/dateRange";
 import { createMigratedLocalD1 } from "../scripts/createLocalD1";
@@ -47,7 +47,7 @@ test("creates an expense from a full message with the Belgrade local date", asyn
     const sourceUpdateId = 4100;
     const currentTime = new Date("2026-03-28T23:30:00.000Z");
     await seedMember(context.DB, telegramUserId, "Анна", 1);
-    const result = await submitExpenseMessage(context.repository, {
+    const result = await processExpenseMessage(context.repository, {
       telegramUserId, sourceUpdateId, text: "2490 продукты Lidl", currentTime
     });
     assert(result.kind === ApplicationResultKind.ExpenseSaved);
@@ -70,7 +70,7 @@ test("prepares every category after an amount-only message without creating a dr
     const sourceUpdateId = 5100;
     const amountRsd = 2490;
     await seedMember(context.DB, telegramUserId, "Анна", 1);
-    const result = await submitExpenseMessage(context.repository, {
+    const result = await processExpenseMessage(context.repository, {
       telegramUserId, sourceUpdateId, text: amountRsd.toString(), currentTime: new Date("2026-09-18T10:00:00.000Z")
     });
     assert.deepEqual(result, {
@@ -116,7 +116,7 @@ test("returns shared history and expense details to another enabled member", asy
     const viewerId = "502";
     await seedMember(context.DB, authorId, "Анна", 1);
     await seedMember(context.DB, viewerId, "Борис", 1);
-    const saved = await submitExpenseMessage(context.repository, {
+    const saved = await processExpenseMessage(context.repository, {
       telegramUserId: authorId, sourceUpdateId: 7100, text: "800 рестораны Ужин", currentTime: new Date("2026-09-18T10:00:00.000Z")
     });
     assert(saved.kind === ApplicationResultKind.ExpenseSaved);
@@ -137,7 +137,7 @@ test("edits every mutable field and deletes a shared expense", async () => {
     const editorId = "602";
     await seedMember(context.DB, authorId, "Анна", 1);
     await seedMember(context.DB, editorId, "Борис", 1);
-    const saved = await submitExpenseMessage(context.repository, {
+    const saved = await processExpenseMessage(context.repository, {
       telegramUserId: authorId, sourceUpdateId: 8100, text: "1200 продукты Старое", currentTime: new Date("2026-09-18T10:00:00.000Z")
     });
     assert(saved.kind === ApplicationResultKind.ExpenseSaved);

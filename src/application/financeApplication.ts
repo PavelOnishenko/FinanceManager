@@ -36,7 +36,7 @@ export type ExpenseEdit =
   | { field: "date"; spentOn: string }
   | { field: "comment"; comment?: string };
 
-type SubmitExpenseMessageInput = {
+type ProcessExpenseMessageInput = {
   telegramUserId: string;
   sourceUpdateId: number;
   text: string;
@@ -59,7 +59,7 @@ export async function checkAccess(repository: D1FinanceRepository, telegramUserI
   return member ? { kind: ApplicationResultKind.AccessAllowed, member } : { kind: ApplicationResultKind.AccessDenied, telegramUserId };
 }
 
-export async function submitExpenseMessage(repository: D1FinanceRepository, input: SubmitExpenseMessageInput): Promise<ExpenseMessageResult> {
+export async function processExpenseMessage(repository: D1FinanceRepository, input: ProcessExpenseMessageInput): Promise<ExpenseMessageResult> {
   const access = await checkAccess(repository, input.telegramUserId);
   if (access.kind === ApplicationResultKind.AccessDenied) return access;
 
