@@ -9,7 +9,7 @@
 - Начальная D1-миграция создана и локально проверена.
 - Реализованы категории, разбор текстового расхода, расчёт статистики, `source_action_key` и формат stateless-редактирования через Telegram `ForceReply`.
 - D1 repository реализован и проверен интеграционными тестами на временной локальной D1.
-- Telegram-обработчиков и application-слоя ещё нет.
+- Application-слой реализован и проверен интеграционными тестами; Telegram-обработчиков ещё нет.
 - Реальные Cloudflare/Telegram аккаунты и секреты пока не нужны и не настроены.
 - `wrangler.jsonc` содержит временный нулевой `database_id`; его нужно заменить после создания удалённой D1.
 - `FinanceManagerWorkspace.code-workspace` создан пользователем и должен быть сохранён.
@@ -92,7 +92,7 @@ npm.cmd run dev
 
 Проверка реализованного шага: `npm.cmd test` и `npm.cmd run demo:storage`. Demo должен показать `firstCreated: true`, `duplicateCreated: false`, одну запись и статистику на 2490 RSD. Удалённая Cloudflare D1 этим не проверяется.
 
-### 2. Реализовать application-сценарии
+### 2. Реализовать application-сценарии — выполнено
 
 Добавить `src/application` с небольшими функциями, не зависящими от grammY:
 
@@ -106,6 +106,8 @@ npm.cmd run dev
 - произвольный включительный диапазон дат.
 
 Не добавлять универсальный framework команд, event bus, dependency injection container или абстракции «на будущее».
+
+Проверка реализованного шага: `npm.cmd test`, `npm.cmd run check`, `npm.cmd run build` и `npm.cmd run demo:application`. Demo должно показать `directCreated: true`, 15 категорий, `selectedCreated: true`, `duplicateCreated: false`, две записи и статистику предыдущего месяца на 3190 RSD. Реальные Telegram update и удалённая Cloudflare D1 этим не проверяются.
 
 ### 3. Реализовать Telegram-слой
 

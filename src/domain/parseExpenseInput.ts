@@ -1,5 +1,6 @@
 import { categories, type CategoryId } from "../config/categories";
 
+// todo typify kind field similar to ApplicationResultKind?
 export type ParsedExpenseInput =
   | { kind: "amount"; amountRsd: number }
   | { kind: "expense"; amountRsd: number; categoryId: CategoryId; comment?: string }
