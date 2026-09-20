@@ -2,8 +2,9 @@ import { Bot, InlineKeyboard, Keyboard, type Context } from "grammy";
 import { categories } from "../config/categories";
 import {
   ApplicationResultKind as Result, checkAccess, createExpenseAfterCategorySelection, deleteExpense, editExpense, getExpenseDetails,
-  getExpenseHistory, getPreviousMonthStatistics, processExpenseMessage, type AccessDenied, type InvalidInput
+  getExpenseHistory, getPreviousMonthStatistics, getStatisticsForRange, processExpenseMessage, type AccessDenied, type InvalidInput
 } from "../application/financeApplication";
+import { firstStatisticsYear, getCalendarMonthRange, shiftCalendarMonth } from "../application/dateRange";
 import { createEditPrompt, parseEditPrompt } from "../domain/editPrompt";
 import type { D1FinanceRepository, Expense } from "../storage/D1FinanceRepository";
 import { formatCallbackData, parseCallbackData, type BotAction } from "./callbackData";
@@ -11,6 +12,9 @@ import { parseEditReply } from "./parseEditReply";
 
 const menu = new Keyboard().text("История").text("Статистика").text("Помощь").resized().persistent();
 const help = "Отправьте расход: 2490 продукты Lidl или просто 2490 и выберите категорию. Дата редактирования: ДД.ММ.ГГГГ.";
+const invalidRangeText = "Конец периода не может быть раньше начала";
+const statisticsStartText = `Статистика доступна с ${firstStatisticsYear} года.`;
+const oldStatisticsYearText = `${statisticsStartText} Откройте её заново.`;
 
 export function createFinanceBot(token: string, repository: D1FinanceRepository) {
   const bot = new Bot(token);
@@ -52,9 +56,8 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository)
       const result = await getPreviousMonthStatistics(repository, String(context.from.id), new Date());
       if (result.kind !== Result.ExpenseStatistics)
         return void await context.reply(result.kind === Result.AccessDenied ? accessDeniedText(result.telegramUserId) : result.message);
-      const lines = result.statistics.categoryTotals.map(category => `${category.categoryName}: ${category.amountRsd} RSD`);
-      return void await context.reply(`${result.range.fromDate} — ${result.range.toDate}\nИтого: ${result.statistics.totalRsd} RSD`
-        + (lines.length ? `\n${lines.join("\n")}` : ""));
+      if (!getCalendarMonthRange(result.range.fromDate.slice(0, 7))) return void await context.reply(statisticsStartText);
+      return void await context.reply(statisticsText(result), { reply_markup: statisticsButtons(result.range.fromDate.slice(0, 7)) });
     }
 
     const target = context.message.reply_to_message;
@@ -106,7 +109,36 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository)
         return;
       }
       const userId = String(context.from.id);
-      if (action.kind === "create") {
+      if (action.kind === "statistics-year-too-old") {
+        acknowledgement = oldStatisticsYearText;
+        showAlert = true;
+        return;
+      }
+      if (action.kind === "calendar-noop") return;
+      if (action.kind === "statistics-month") {
+        const range = getCalendarMonthRange(action.month)!;
+        const result = await getStatisticsForRange(repository, userId, range);
+        if (result.kind !== Result.ExpenseStatistics) 
+          return void (acknowledgement = result.kind === Result.AccessDenied ? accessDeniedText(result.telegramUserId) : result.message);
+        await context.editMessageText(statisticsText(result), { reply_markup: statisticsButtons(action.month) });
+      } else if (action.kind === "calendar") {
+        await context.editMessageText(calendarText(action.month, action.startDate), { reply_markup: calendarButtons(action.month, action.startDate) });
+      } else if (action.kind === "calendar-day") {
+        const selectedDate = `${action.month}-${String(action.day).padStart(2, "0")}`;
+        if (!action.startDate) 
+          await context.editMessageText(calendarText(action.month, selectedDate), { reply_markup: calendarButtons(action.month, selectedDate)});
+        else if (selectedDate < action.startDate) {
+          acknowledgement = invalidRangeText;
+          showAlert = true;
+        } else {
+          const result = await getStatisticsForRange(repository, userId, { fromDate: action.startDate, toDate: selectedDate });
+          if (result.kind !== Result.ExpenseStatistics) 
+            return void (acknowledgement = result.kind === Result.AccessDenied ? accessDeniedText(result.telegramUserId) : result.message);
+          await context.editMessageText(statisticsText(result), {
+            reply_markup: new InlineKeyboard().text("Другой период", formatCallbackData({ kind: "calendar", month: action.month }))
+          });
+        }
+      } else if (action.kind === "create") {
         const result = await createExpenseAfterCategorySelection(repository, {
           telegramUserId: userId, sourceUpdateId: action.sourceUpdateId, amountRsd: action.amountRsd,
           categoryId: action.categoryId, currentTime: new Date()
@@ -143,7 +175,9 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository)
       acknowledgement = failureText(context.update.update_id);
       showAlert = true;
     } finally {
-      const isProblem = !!acknowledgement && !["Расход сохранён", "Расход удалён", "Расход уже сохранён"].includes(acknowledgement);
+      const isProblem = !!acknowledgement && ![
+        "Расход сохранён", "Расход удалён", "Расход уже сохранён", invalidRangeText, oldStatisticsYearText
+      ].includes(acknowledgement);
       if (isProblem && context.chat?.type === "private") {
         try {
           await context.reply(acknowledgement);
@@ -193,6 +227,49 @@ function failureText(updateId: number): string {
 function describe(expense: Expense): string {
   return `#${expense.id} · ${expense.amountRsd} RSD · ${expense.categoryName} · ${expense.spentOn} · ${expense.authorName}`
     + (expense.comment ? ` · ${expense.comment}` : "");
+}
+
+function statisticsText(result: Extract<Awaited<ReturnType<typeof getStatisticsForRange>>, { kind: typeof Result.ExpenseStatistics }>): string {
+  const lines = result.statistics.categoryTotals.map(category => `${category.categoryName}: ${category.amountRsd} RSD`);
+  return `${result.range.fromDate} — ${result.range.toDate}\nИтого: ${result.statistics.totalRsd} RSD`
+    + (lines.length ? `\n${lines.join("\n")}` : "");
+}
+
+function statisticsButtons(month: string): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  const previous = shiftCalendarMonth(month, -1);
+  const next = shiftCalendarMonth(month, 1);
+  if (previous) keyboard.text("◀ Предыдущий месяц", formatCallbackData({ kind: "statistics-month", month: previous }));
+  if (next) keyboard.text("Следующий месяц ▶", formatCallbackData({ kind: "statistics-month", month: next }));
+  return keyboard.row().text("Другой период", formatCallbackData({ kind: "calendar", month }));
+}
+
+function calendarText(month: string, startDate?: string): string {
+  return `${month}\nПн Вт Ср Чт Пт Сб Вс\n${startDate ? `Начало: ${startDate}. Выберите конец периода.` : "Выберите начало периода."}`;
+}
+
+function calendarButtons(month: string, startDate?: string): InlineKeyboard {
+  const range = getCalendarMonthRange(month)!;
+  const keyboard = new InlineKeyboard();
+  const previous = shiftCalendarMonth(month, -1);
+  const next = shiftCalendarMonth(month, 1);
+  if (previous) 
+    keyboard.text("◀", formatCallbackData({ kind: "calendar", month: previous, startDate }));
+  keyboard.text(month, formatCallbackData({ kind: "calendar-noop" }));
+  if (next) 
+    keyboard.text("▶", formatCallbackData({ kind: "calendar", month: next, startDate }));
+  keyboard.row();
+  const firstWeekday = (new Date(`${range.fromDate}T00:00:00Z`).getUTCDay() + 6) % 7;
+  const days = Number(range.toDate.slice(-2));
+  for (let cell = 0; cell < firstWeekday + days; cell++) {
+    const day = cell - firstWeekday + 1;
+    if (day < 1) keyboard.text("·", formatCallbackData({ kind: "calendar-noop" }));
+    else keyboard.text(day === Number(startDate?.slice(-2)) && startDate?.startsWith(month) ? `[${day}]` : String(day),
+      formatCallbackData({ kind: "calendar-day", month, day, startDate }));
+    if (cell % 7 === 6) keyboard.row();
+  }
+  if (startDate) keyboard.row().text("Сбросить начало", formatCallbackData({ kind: "calendar", month }));
+  return keyboard;
 }
 
 function detailButtons(expenseId: number): InlineKeyboard {

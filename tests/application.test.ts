@@ -5,7 +5,7 @@ import {
   ApplicationResultKind, checkAccess, createExpenseAfterCategorySelection, deleteExpense, editExpense, getExpenseDetails, getExpenseHistory,
   getPreviousMonthStatistics, getStatisticsForRange, processExpenseMessage
 } from "../src/application/financeApplication";
-import { getDateInFinanceTimeZone, getPreviousCalendarMonthRange, isValidCalendarDate } from "../src/application/dateRange";
+import { getCalendarMonthRange, getDateInFinanceTimeZone, getPreviousCalendarMonthRange, isValidCalendarDate, shiftCalendarMonth } from "../src/application/dateRange";
 import { createMigratedLocalD1 } from "../scripts/createLocalD1";
 import { D1FinanceRepository } from "../src/storage/D1FinanceRepository";
 import type { SqlDatabase } from "../src/storage/SqlDatabase";
@@ -218,4 +218,13 @@ test("handles Belgrade dates and leap-year month boundaries", () => {
   assert.deepEqual(getPreviousCalendarMonthRange(new Date("2024-03-15T12:00:00.000Z")), { fromDate: "2024-02-01", toDate: "2024-02-29" });
   assert.equal(isValidCalendarDate("2024-02-29"), true);
   assert.equal(isValidCalendarDate("2026-02-29"), false);
+});
+
+test("statistics month navigation stops at 2026", () => {
+  assert.equal(getCalendarMonthRange("2025-12"), undefined);
+  assert.equal(getCalendarMonthRange("0000-01"), undefined);
+  assert.deepEqual(getCalendarMonthRange("2026-01"), { fromDate: "2026-01-01", toDate: "2026-01-31" });
+  assert.equal(shiftCalendarMonth("2026-01", -1), undefined);
+  assert.equal(shiftCalendarMonth("2025-12", 1), undefined);
+  assert.equal(shiftCalendarMonth("2026-01", 1), "2026-02");
 });

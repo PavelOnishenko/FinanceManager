@@ -1,4 +1,5 @@
 export const financeTimeZone = "Europe/Belgrade";
+export const firstStatisticsYear = 2026;
 
 export type DateRange = { fromDate: string; toDate: string };
 
@@ -17,6 +18,29 @@ export function getPreviousCalendarMonthRange(instant: Date): DateRange {
   const year = currentMonth === 1 ? currentYear - 1 : currentYear;
   const month = currentMonth === 1 ? 12 : currentMonth - 1;
   return { fromDate: formatDate(year, month, 1), toDate: formatDate(year, month, daysInMonth(year, month)) };
+}
+
+export function getCalendarMonthRange(month: string): DateRange | undefined {
+  const parsed = parseCalendarMonth(month);
+  if (!parsed) return undefined;
+  return { fromDate: `${month}-01`, toDate: formatDate(parsed.year, parsed.monthNumber, daysInMonth(parsed.year, parsed.monthNumber)) };
+}
+
+export function shiftCalendarMonth(month: string, offset: -1 | 1): string | undefined {
+  const parsed = parseCalendarMonth(month);
+  if (!parsed) return undefined;
+  const next = parsed.year * 12 + parsed.monthNumber - 1 + offset;
+  const nextYear = Math.floor(next / 12);
+  if (nextYear < firstStatisticsYear || nextYear > 9999) return undefined;
+  return `${nextYear.toString().padStart(4, "0")}-${(next % 12 + 1).toString().padStart(2, "0")}`;
+}
+
+function parseCalendarMonth(month: string): { year: number; monthNumber: number } | undefined {
+  const match = month.match(/^(\d{4})-(0[1-9]|1[0-2])$/);
+  if (!match) return undefined;
+  const year = Number(match[1]);
+  if (year < firstStatisticsYear) return undefined;
+  return { year, monthNumber: Number(match[2]) };
 }
 
 export function isValidCalendarDate(value: string): boolean {

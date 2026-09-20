@@ -54,9 +54,12 @@ async function createTelegramFixture(userId: number, botId: number) {
 
 test("callback actions round-trip within Telegram's 64-byte limit", () => {
   const actions: BotAction[] = [
+    { kind: "calendar-noop" },
     { kind: "create", sourceUpdateId: 9007199254740991, amountRsd: 9007199254740991, categoryId: "personal-care" },
     { kind: "details", expenseId: 23 }, { kind: "delete-request", expenseId: 23 }, { kind: "delete-confirm", expenseId: 23 },
-    { kind: "edit-prompt", expenseId: 23, field: "comment" }, { kind: "edit-category", expenseId: 23, categoryId: "groceries" }
+    { kind: "edit-prompt", expenseId: 23, field: "comment" }, { kind: "edit-category", expenseId: 23, categoryId: "groceries" },
+    { kind: "statistics-month", month: "2026-02" }, { kind: "calendar", month: "2026-03", startDate: "2026-02-28" },
+    { kind: "calendar-day", month: "2026-03", day: 1, startDate: "2026-02-28" }
   ];
   for (const action of actions) {
     const data = formatCallbackData(action);
@@ -75,6 +78,128 @@ test("rejects a create callback with a category index outside the category list"
 
 test("rejects a details callback with an extra field", () => {
   assert.equal(parseCallbackData("d:1:extra"), undefined);
+});
+
+test("rejects invalid calendar callback dates and months", () => {
+  assert.equal(parseCallbackData("s:202613"), undefined);
+  assert.equal(parseCallbackData("k:202602:20260229"), undefined);
+  assert.equal(parseCallbackData("t:202602:0:30"), undefined);
+  assert.equal(parseCallbackData("t:202602:0:0"), undefined);
+  assert.equal(parseCallbackData("s:202602:extra"), undefined);
+  assert.deepEqual(parseCallbackData("s:202512"), { kind: "statistics-year-too-old" });
+  assert.deepEqual(parseCallbackData("k:000001:0"), { kind: "statistics-year-too-old" });
+  assert.deepEqual(parseCallbackData("t:202601:20251231:1"), { kind: "statistics-year-too-old" });
+});
+
+test("January 2026 has no previous-month button and old buttons explain the limit", async context => {
+  const userId = 127;
+  const fixture = await createTelegramFixture(userId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  await fixture.bot.handleUpdate(fixture.callback(710, formatCallbackData({ kind: "statistics-month", month: "2026-01" })));
+  const buttons = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
+    inline_keyboard: { callback_data: string }[][]
+  }).inline_keyboard;
+  assert.deepEqual(buttons.flat().map(button => parseCallbackData(button.callback_data)), [
+    { kind: "statistics-month", month: "2026-02" }, { kind: "calendar", month: "2026-01" }
+  ]);
+  await fixture.bot.handleUpdate(fixture.callback(711, "s:202512"));
+  assert.equal(fixture.calls.at(-1)?.method, "answerCallbackQuery");
+  assert.equal(fixture.calls.at(-1)?.payload.show_alert, true);
+  assert.equal(fixture.calls.at(-1)?.payload.text, "Статистика доступна с 2026 года. Откройте её заново.");
+  assert.equal(fixture.calls.filter(call => call.method === "editMessageText").length, 1);
+});
+
+test("monthly statistics includes boundary dates and lists family categories by total", async context => {
+  const userId = 127;
+  const otherUserId = 128;
+  const month = "2026-02";
+  const fixture = await createTelegramFixture(userId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  await addMember(fixture.database.DB, otherUserId, "Борис", 1);
+  await fixture.repository.createExpense({ sourceActionKey: "before", amountRsd: 900, categoryId: "other", spentOn: "2026-01-31", createdBy: String(userId) });
+  await fixture.repository.createExpense({ sourceActionKey: "start", amountRsd: 1000, categoryId: "groceries", spentOn: "2026-02-01", createdBy: String(userId) });
+  await fixture.repository.createExpense({ sourceActionKey: "middle", amountRsd: 1500, categoryId: "transport", spentOn: "2026-02-15", createdBy: String(otherUserId) });
+  await fixture.repository.createExpense({ sourceActionKey: "end", amountRsd: 2000, categoryId: "groceries", spentOn: "2026-02-28", createdBy: String(otherUserId) });
+  await fixture.repository.createExpense({ sourceActionKey: "after", amountRsd: 9000, categoryId: "other", spentOn: "2026-03-01", createdBy: String(userId) });
+
+  await fixture.bot.handleUpdate(fixture.callback(700, formatCallbackData({ kind: "statistics-month", month })));
+  const report = String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text);
+  assert.match(report, /2026-02-01 — 2026-02-28\nИтого: 4500 RSD\nПродукты: 3000 RSD\nТранспорт: 1500 RSD/);
+  const reportButtons = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
+    inline_keyboard: { callback_data: string }[][]
+  }).inline_keyboard;
+  assert.deepEqual(reportButtons.flat().map(button => parseCallbackData(button.callback_data)), [
+    { kind: "statistics-month", month: "2026-01" }, { kind: "statistics-month", month: "2026-03" }, { kind: "calendar", month }
+  ]);
+});
+
+test("calendar placeholder acknowledges a tap without editing the message", async context => {
+  const userId = 127;
+  const month = "2026-02";
+  const fixture = await createTelegramFixture(userId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  await fixture.bot.handleUpdate(fixture.callback(701, formatCallbackData({ kind: "calendar", month })));
+  const calendarButtons = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
+    inline_keyboard: { text: string; callback_data: string }[][]
+  }).inline_keyboard;
+  const placeholder = calendarButtons.flat().find(button => button.text === "·");
+  assert(placeholder);
+  assert.deepEqual(parseCallbackData(placeholder.callback_data), { kind: "calendar-noop" });
+  assert(calendarButtons.flat().some(button => parseCallbackData(button.callback_data)?.kind === "calendar-day"));
+  await fixture.bot.handleUpdate(fixture.callback(706, placeholder.callback_data));
+  assert.equal(fixture.calls.at(-1)?.method, "answerCallbackQuery");
+  assert.equal(fixture.calls.filter(call => call.method === "editMessageText").length, 1);
+});
+
+test("calendar rejects an end date before the selected start", async context => {
+  const userId = 127;
+  const month = "2026-02";
+  const fixture = await createTelegramFixture(userId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  await fixture.bot.handleUpdate(fixture.callback(701, formatCallbackData({ kind: "calendar", month })));
+  await fixture.bot.handleUpdate(fixture.callback(702, formatCallbackData({ kind: "calendar-day", month, day: 15 })));
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /Начало: 2026-02-15/);
+  await fixture.bot.handleUpdate(fixture.callback(703, formatCallbackData({ kind: "calendar-day", month, day: 14, startDate: "2026-02-15" })));
+  assert.equal(fixture.calls.filter(call => call.method === "editMessageText").length, 2);
+  assert.match(String(fixture.calls.at(-1)?.payload.text), /Конец периода не может быть раньше начала/);
+  assert.equal(fixture.calls.at(-1)?.payload.show_alert, true);
+});
+
+test("calendar keeps the start date across months and includes both range boundaries", async context => {
+  const userId = 127;
+  const otherUserId = 128;
+  const startDate = "2026-02-15";
+  const fixture = await createTelegramFixture(userId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  await addMember(fixture.database.DB, otherUserId, "Борис", 1);
+  await fixture.repository.createExpense({ sourceActionKey: "before", amountRsd: 1000, categoryId: "other", spentOn: "2026-02-14", createdBy: String(userId) });
+  await fixture.repository.createExpense({ sourceActionKey: "start", amountRsd: 1500, categoryId: "transport", spentOn: startDate, createdBy: String(otherUserId) });
+  await fixture.repository.createExpense({ sourceActionKey: "middle", amountRsd: 2000, categoryId: "groceries", spentOn: "2026-02-28", createdBy: String(userId) });
+  await fixture.repository.createExpense({ sourceActionKey: "end", amountRsd: 9000, categoryId: "other", spentOn: "2026-03-01", createdBy: String(otherUserId) });
+  await fixture.repository.createExpense({ sourceActionKey: "after", amountRsd: 3000, categoryId: "other", spentOn: "2026-03-02", createdBy: String(userId) });
+
+  await fixture.bot.handleUpdate(fixture.callback(701, formatCallbackData({ kind: "calendar", month: "2026-02" })));
+  await fixture.bot.handleUpdate(fixture.callback(702, formatCallbackData({ kind: "calendar-day", month: "2026-02", day: 15 })));
+  const nextMonthButton = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
+    inline_keyboard: { text: string; callback_data: string }[][]
+  }).inline_keyboard[0]?.find(button => button.text === "▶");
+  assert(nextMonthButton);
+  assert.deepEqual(parseCallbackData(nextMonthButton.callback_data), { kind: "calendar", month: "2026-03", startDate });
+  await fixture.bot.handleUpdate(fixture.callback(704, nextMonthButton.callback_data));
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /Начало: 2026-02-15/);
+  const firstDayButton = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
+    inline_keyboard: { text: string; callback_data: string }[][]
+  }).inline_keyboard.flat().find(button => button.text === "1");
+  assert(firstDayButton);
+  assert.deepEqual(parseCallbackData(firstDayButton.callback_data), { kind: "calendar-day", month: "2026-03", day: 1, startDate });
+  await fixture.bot.handleUpdate(fixture.callback(705, firstDayButton.callback_data));
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /2026-02-15 — 2026-03-01\nИтого: 12500 RSD/);
+  assert.equal(fixture.calls.filter(call => call.method === "answerCallbackQuery").length, 4);
 });
 
 test("denies an unknown user and welcomes an enabled member", async context => {
