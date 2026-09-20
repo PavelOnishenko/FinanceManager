@@ -10,8 +10,8 @@
 - Реализованы категории, разбор текстового расхода, расчёт статистики, `source_action_key` и формат stateless-редактирования через Telegram `ForceReply`.
 - D1 repository реализован и проверен интеграционными тестами на временной локальной D1.
 - Application-слой и Telegram-обработчики реализованы и проверены локальными update fixtures; реальный Telegram ещё не проверен.
-- Реальные Cloudflare/Telegram аккаунты и секреты пока не нужны и не настроены.
-- `wrangler.jsonc` содержит временный нулевой `database_id`; его нужно заменить после создания удалённой D1.
+- Cloudflare-аккаунт подключён; удалённая D1 `family-finance-bot` создана и мигрирована. Telegram-бот и секреты пока не настроены.
+- `wrangler.jsonc` содержит реальный `database_id` удалённой D1.
 - `FinanceManagerWorkspace.code-workspace` создан пользователем и должен быть сохранён.
 
 Текущие проверки:
@@ -163,18 +163,20 @@ npm.cmd run dev
 
 Переходить сюда только после завершения локальной реализации.
 
-### 6. Создать Cloudflare-ресурсы
+### 6. Создать Cloudflare-ресурсы — выполнено
 
-Пользователь:
+Пользователь создал Cloudflare-аккаунт и авторизовал Wrangler через device flow: браузер Codex не может обратиться к локальному OAuth callback. Использованы только `account:read`, `user:read` и `d1:write` (Wrangler добавляет `offline_access`).
 
-1. Создаёт Cloudflare-аккаунт.
-2. Запускает `npx.cmd wrangler login` и подтверждает вход в браузере.
+Агент создал D1 `family-finance-bot` в регионе EEUR, записал её ID в `wrangler.jsonc` и применил `0001_initial.sql` к удалённой базе. Удалённая проверка показала отсутствие ожидающих миграций, 15 категорий, 0 участников и 0 расходов.
 
-После авторизации агент может командами:
+Самостоятельная проверка:
 
-1. Создать D1 `family-finance-bot`.
-2. Заменить нулевой `database_id` в `wrangler.jsonc` на реальный.
-3. Применить миграции к удалённой D1.
+```powershell
+npx.cmd wrangler d1 migrations list family-finance-bot --remote
+npx.cmd wrangler d1 execute family-finance-bot --remote --command "SELECT (SELECT COUNT(*) FROM categories) AS category_count, (SELECT COUNT(*) FROM members) AS member_count, (SELECT COUNT(*) FROM expenses) AS expense_count;"
+```
+
+Ожидается `No migrations to apply!`, затем `category_count: 15`, `member_count: 0`, `expense_count: 0`. Реальный Telegram и Worker в Cloudflare этим шагом не проверены. Для секретов и развёртывания понадобятся дополнительные права Wrangler.
 
 ### 7. Создать Telegram-бота
 

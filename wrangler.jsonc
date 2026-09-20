@@ -7,7 +7,7 @@
     {
       "binding": "DB",
       "database_name": "family-finance-bot",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "321e1e7d-60b9-487e-b8aa-493da129bcba",
       "migrations_dir": "migrations"
     }
   ]
