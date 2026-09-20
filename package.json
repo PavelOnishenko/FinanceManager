@@ -7,6 +7,7 @@
     "build": "wrangler deploy --dry-run --outdir dist",
     "check": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json",
     "test": "tsx --test tests/**/*.test.ts",
+    "demo:webhook": "tsx --test tests/webhookSmoke.test.ts",
     "demo:application": "tsx scripts/demo-application.ts",
     "demo:telegram": "tsx --test tests/telegram.test.ts",
     "demo:storage": "tsx scripts/demo-storage.ts",
@@ -19,6 +20,7 @@
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260916.1",
     "@types/node": "22.20.3",
+    "esbuild": "0.28.2",
     "miniflare": "5.20260916.0-alpha",
     "tsx": "4.23.13",
     "typescript": "7.0.2",
