@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
 import { build } from "esbuild";
 import { Miniflare } from "miniflare";
@@ -33,7 +33,9 @@ test("local webhook smoke covers authentication, expenses, editing, deletion and
 
   try {
     const DB = new CloudflareD1Database((await miniflare.getBindings<{ DB: CloudflareD1Binding }>("finance-smoke")).DB);
-    const migration = await readFile(new URL("../migrations/0001_initial.sql", import.meta.url), "utf8");
+    const migrationsDirectory = new URL("../migrations/", import.meta.url);
+    const migrationNames = (await readdir(migrationsDirectory)).filter(name => name.endsWith(".sql")).sort();
+    const migration = (await Promise.all(migrationNames.map(name => readFile(new URL(name, migrationsDirectory), "utf8")))).join("\n");
     for (const statement of migration.split(";").map(part => part.trim()).filter(Boolean))
       await DB.prepare(statement).execute();
 
@@ -73,7 +75,7 @@ test("local webhook smoke covers authentication, expenses, editing, deletion and
     assert.equal((await rows())[0]?.comment, "Lidl");
     await accepted(message(401, "700"));
     const categoryButtons = (await lastCall("sendMessage"))?.payload.reply_markup as { inline_keyboard: { callback_data: string }[][] };
-    assert.equal(categoryButtons.inline_keyboard.length, 15);
+    assert.equal(categoryButtons.inline_keyboard.length, 18);
     await accepted(callback(402, categoryButtons.inline_keyboard[0]![0]!.callback_data));
     await accepted(callback(403, categoryButtons.inline_keyboard[1]![0]!.callback_data));
     assert.equal((await rows()).length, 2);
