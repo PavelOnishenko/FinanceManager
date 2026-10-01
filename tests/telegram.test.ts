@@ -274,16 +274,23 @@ test("menu buttons return help and previous-month statistics", async context => 
 
 test("history shows one button per recent expense", async context => {
   const userId = 127;
+  const groceriesDate = "2026-09-17";
+  const transportDate = "2026-09-18";
   const fixture = await createTelegramFixture(userId, 999);
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
-  await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
-  await fixture.bot.handleUpdate(fixture.message(401, "700 транспорт Такси"));
+  await fixture.repository.createExpense({
+    sourceActionKey: "history-groceries", amountRsd: 2490, categoryId: "groceries", spentOn: groceriesDate, comment: "Lidl", createdBy: String(userId)
+  });
+  await fixture.repository.createExpense({
+    sourceActionKey: "history-transport", amountRsd: 700, categoryId: "transport", spentOn: transportDate, comment: "Такси", createdBy: String(userId)
+  });
 
   await fixture.bot.handleUpdate(fixture.message(402, "История"));
-  const buttons = (fixture.calls.at(-1)?.payload.reply_markup as { inline_keyboard: unknown[][] }).inline_keyboard;
+  const buttons = (fixture.calls.at(-1)?.payload.reply_markup as { inline_keyboard: { text: string }[][] }).inline_keyboard;
   assert.equal(buttons.length, 2);
   assert(buttons.every(row => row.length === 1));
+  assert.deepEqual(buttons.map(row => row[0]?.text), ["#2 · 700 RSD · Транспорт · 18.09.2026", "#1 · 2490 RSD · Продукты · 17.09.2026"]);
 });
 
 test("expense details keep categories behind a button and can return from the category list", async context => {

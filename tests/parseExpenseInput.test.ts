@@ -20,6 +20,10 @@ test("uses the longest matching category alias", () => {
 test("supports useful category aliases", () => {
   assert.deepEqual(parseExpenseInput("1000 ИП"), { kind: "expense", amountRsd: 1000, categoryId: "business" });
   assert.deepEqual(parseExpenseInput("350 коммуналка"), { kind: "expense", amountRsd: 350, categoryId: "utilities" });
+  assert.deepEqual(parseExpenseInput("2000 подарок"), { kind: "expense", amountRsd: 2000, categoryId: "gifts" });
+  assert.deepEqual(parseExpenseInput("500 потеряно"), { kind: "expense", amountRsd: 500, categoryId: "lost-money" });
+  assert.deepEqual(parseExpenseInput("900 подписка Netflix"), { kind: "expense", amountRsd: 900, categoryId: "subscriptions", comment: "Netflix" });
+  assert.deepEqual(parseExpenseInput("700 сервис YouTube"), { kind: "expense", amountRsd: 700, categoryId: "subscriptions", comment: "YouTube" });
 });
 
 test("rejects invalid input", () => {
