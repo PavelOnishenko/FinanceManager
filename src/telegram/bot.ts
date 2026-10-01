@@ -47,7 +47,7 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository)
       const result = await getExpenseHistory(repository, String(context.from.id));
       if (result.kind === Result.AccessDenied) return void await context.reply(accessDeniedText(result.telegramUserId));
       const keyboard = new InlineKeyboard(result.expenses.map(expense => [{
-        text: `#${expense.id} · ${expense.amountRsd} RSD · ${expense.categoryName}`,
+        text: `#${expense.id} · ${expense.amountRsd} RSD · ${expense.categoryName} · ${formatExpenseDate(expense.spentOn)}`,
         callback_data: formatCallbackData({ kind: "details", expenseId: expense.id })
       }]));
       return void await context.reply(result.expenses.length ? "Последние 10 расходов:" : "Расходов пока нет.", { reply_markup: keyboard });
@@ -234,6 +234,10 @@ function failureText(updateId: number): string {
 function describe(expense: Expense): string {
   return `#${expense.id} · ${expense.amountRsd} RSD · ${expense.categoryName} · ${expense.spentOn} · ${expense.authorName}`
     + (expense.comment ? ` · ${expense.comment}` : "");
+}
+
+function formatExpenseDate(spentOn: string): string {
+  return spentOn.split("-").reverse().join(".");
 }
 
 function statisticsText(result: Extract<Awaited<ReturnType<typeof getStatisticsForRange>>, { kind: typeof Result.ExpenseStatistics }>): string {
