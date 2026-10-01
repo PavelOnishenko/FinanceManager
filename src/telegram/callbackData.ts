@@ -6,7 +6,7 @@ import { firstStatisticsYear, isValidCalendarDate } from "../application/dateRan
 export type BotAction =
   | { kind: "calendar-noop" }
   | { kind: "create"; sourceUpdateId: number; amountRsd: number; categoryId: CategoryId }
-  | { kind: "details" | "delete-request" | "delete-confirm"; expenseId: number }
+  | { kind: "details" | "category-list" | "edit-actions" | "delete-request" | "delete-confirm"; expenseId: number }
   | { kind: "edit-prompt"; expenseId: number; field: TextEditField }
   | { kind: "edit-category"; expenseId: number; categoryId: CategoryId }
   | { kind: "statistics-month"; month: string }
@@ -25,7 +25,7 @@ export function formatCallbackData(action: BotAction): string {
   else if (action.kind === "calendar-day") data = `t:${action.month.replace("-", "")}:${action.startDate?.replaceAll("-", "") ?? "0"}:${action.day}`;
   else if (action.kind === "edit-category") data = `e:${action.expenseId}:${categoryIndex.get(action.categoryId)}`;
   else if (action.kind === "edit-prompt") data = `p:${action.expenseId}:${editFields.indexOf(action.field)}`;
-  else data = `${{ details: "d", "delete-request": "r", "delete-confirm": "x" }[action.kind]}:${action.expenseId}`;
+  else data = `${{ details: "d", "category-list": "l", "edit-actions": "a", "delete-request": "r", "delete-confirm": "x" }[action.kind]}:${action.expenseId}`;
   if (new TextEncoder().encode(data).length > 64) throw new Error("Telegram callback_data exceeds 64 bytes");
   return data;
 }
@@ -59,6 +59,10 @@ export function parseCallbackData(data: string): BotAction | { kind: "statistics
   }
   if (!expenseId || parts.length !== (parts[0] === "p" || parts[0] === "e" ? 3 : 2)) return undefined;
   if (parts[0] === "d") return { kind: "details", expenseId };
+  if (parts[0] === "l")
+    return { kind: "category-list", expenseId };
+  if (parts[0] === "a")
+    return { kind: "edit-actions", expenseId };
   if (parts[0] === "r") return { kind: "delete-request", expenseId };
   if (parts[0] === "x") return { kind: "delete-confirm", expenseId };
   if (parts[0] === "p") {

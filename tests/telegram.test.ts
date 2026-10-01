@@ -10,6 +10,7 @@ import type { SqlDatabase } from "../src/storage/SqlDatabase";
 import { hasValidWebhookSecret } from "../src/telegram/webhookSecret";
 
 type ReplyTarget = NonNullable<Message["reply_to_message"]>;
+type TelegramApiCall = { method: string; payload: Record<string, unknown> };
 let telegramFixtureNumber = 0;
 
 function createTestBotInfo(botId: number): UserFromGetMe {
@@ -25,13 +26,14 @@ async function addMember(database: SqlDatabase, userId: number, displayName: str
     .bind(String(userId), displayName, enabled).execute();
 }
 
+// todo I would like to have a return type here to understand what we are constructing
 async function createTelegramFixture(userId: number, botId: number) {
   const database = await createMigratedLocalD1(`telegram-scenario-${++telegramFixtureNumber}`);
   const repository = new D1FinanceRepository(database.DB);
   const chat: Chat.PrivateChat = { id: userId, type: "private", first_name: "Test user" };
   const user: User = { id: userId, is_bot: false, first_name: "Test user" };
   const botInfo = createTestBotInfo(botId);
-  const calls: { method: string; payload: Record<string, unknown> }[] = [];
+  const calls: TelegramApiCall[] = [];
   const bot = createFinanceBot("123:fixture", repository);
   bot.botInfo = botInfo;
   bot.api.config.use(async (_previous, method, payload) => {
@@ -52,11 +54,18 @@ async function createTelegramFixture(userId: number, botId: number) {
   return { database, repository, bot, botInfo, calls, chat, user, message, command, callback, replyTarget };
 }
 
+function assertMenuShown(calls: TelegramApiCall[]) {
+  const keyboard = calls.findLast(call => call.method === "sendMessage")?.payload.reply_markup as { keyboard: { text: string }[][] } | undefined;
+  assert(keyboard);
+  assert.deepEqual(keyboard.keyboard[0]?.map(button => button.text), ["История", "Статистика", "Помощь"]);
+}
+
 test("callback actions round-trip within Telegram's 64-byte limit", () => {
   const actions: BotAction[] = [
     { kind: "calendar-noop" },
     { kind: "create", sourceUpdateId: 9007199254740991, amountRsd: 9007199254740991, categoryId: "personal-care" },
-    { kind: "details", expenseId: 23 }, { kind: "delete-request", expenseId: 23 }, { kind: "delete-confirm", expenseId: 23 },
+    { kind: "details", expenseId: 23 }, { kind: "category-list", expenseId: 23 }, { kind: "edit-actions", expenseId: 23 },
+    { kind: "delete-request", expenseId: 23 }, { kind: "delete-confirm", expenseId: 23 },
     { kind: "edit-prompt", expenseId: 23, field: "comment" }, { kind: "edit-category", expenseId: 23, categoryId: "groceries" },
     { kind: "statistics-month", month: "2026-02" }, { kind: "calendar", month: "2026-03", startDate: "2026-02-28" },
     { kind: "calendar-day", month: "2026-03", day: 1, startDate: "2026-02-28" }
@@ -276,7 +285,34 @@ test("history shows one button per recent expense", async context => {
   assert(buttons.every(row => row.length === 1));
 });
 
-test("amount edit ignores a forged prompt and accepts the bot's prompt", async context => {
+test("expense details keep categories behind a button and can return from the category list", async context => {
+  const userId = 127;
+  const fixture = await createTelegramFixture(userId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
+
+  await fixture.bot.handleUpdate(fixture.callback(401, formatCallbackData({ kind: "details", expenseId: 1 })));
+  const detailButtons = (fixture.calls.findLast(call => call.method === "sendMessage")?.payload.reply_markup as {
+    inline_keyboard: { text: string; callback_data: string }[][]
+  }).inline_keyboard.flat();
+  assert.deepEqual(detailButtons.map(button => button.text), ["Сумма", "Дата", "Комментарий", "Категория", "Удалить"]);
+
+  await fixture.bot.handleUpdate(fixture.callback(402, detailButtons.find(button => button.text === "Категория")!.callback_data));
+  const categoryButtons = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
+    inline_keyboard: { text: string; callback_data: string }[][]
+  }).inline_keyboard;
+  assert.deepEqual(categoryButtons.map(row => row[0]!.text), [...categories.map(category => category.name), "Назад"]);
+  assert(categoryButtons.every(row => row.length === 1));
+
+  await fixture.bot.handleUpdate(fixture.callback(403, categoryButtons.at(-1)![0]!.callback_data));
+  const returnedButtons = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
+    inline_keyboard: { text: string }[][]
+  }).inline_keyboard.flat();
+  assert.deepEqual(returnedButtons.map(button => button.text), detailButtons.map(button => button.text));
+});
+
+test("amount edit ignores a prompt not sent by the bot", async context => {
   const userId = 127;
   const fixture = await createTelegramFixture(userId, 999);
   context.after(() => fixture.database.dispose());
@@ -288,8 +324,22 @@ test("amount edit ignores a forged prompt and accepts the bot's prompt", async c
   const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
   await fixture.bot.handleUpdate(fixture.message(402, "3000", fixture.replyTarget(prompt, fixture.user)));
   assert.equal((await fixture.repository.getExpenseById(1))?.amountRsd, 2490);
-  await fixture.bot.handleUpdate(fixture.message(403, "3000", fixture.replyTarget(prompt, fixture.botInfo)));
+  assertMenuShown(fixture.calls);
+});
+
+test("amount edit accepts the bot's prompt and restores the menu", async context => {
+  const userId = 127;
+  const fixture = await createTelegramFixture(userId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
+  assert.equal((await fixture.repository.getExpenseById(1))?.amountRsd, 2490);
+
+  await fixture.bot.handleUpdate(fixture.callback(401, formatCallbackData({ kind: "edit-prompt", expenseId: 1, field: "amount" })));
+  const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
+  await fixture.bot.handleUpdate(fixture.message(402, "3000", fixture.replyTarget(prompt, fixture.botInfo)));
   assert.equal((await fixture.repository.getExpenseById(1))?.amountRsd, 3000);
+  assertMenuShown(fixture.calls);
 });
 
 test("date edit changes the explicitly seeded original date", async context => {
@@ -305,6 +355,7 @@ test("date edit changes the explicitly seeded original date", async context => {
   const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
   await fixture.bot.handleUpdate(fixture.message(402, "18.09.2026", fixture.replyTarget(prompt, fixture.botInfo)));
   assert.equal((await fixture.repository.getExpenseById(1))?.spentOn, "2026-09-18");
+  assertMenuShown(fixture.calls);
 });
 
 test("comment edit replaces the original comment", async context => {
@@ -319,6 +370,7 @@ test("comment edit replaces the original comment", async context => {
   const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
   await fixture.bot.handleUpdate(fixture.message(402, "Покупка", fixture.replyTarget(prompt, fixture.botInfo)));
   assert.equal((await fixture.repository.getExpenseById(1))?.comment, "Покупка");
+  assertMenuShown(fixture.calls);
 });
 
 test("category callback replaces the original category", async context => {

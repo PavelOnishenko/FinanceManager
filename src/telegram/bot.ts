@@ -7,7 +7,7 @@ import {
 import { firstStatisticsYear, getCalendarMonthRange, shiftCalendarMonth } from "../application/dateRange";
 import { createEditPrompt, parseEditPrompt } from "../domain/editPrompt";
 import type { D1FinanceRepository, Expense } from "../storage/D1FinanceRepository";
-import { formatCallbackData, parseCallbackData, type BotAction } from "./callbackData";
+import { formatCallbackData, parseCallbackData } from "./callbackData";
 import { parseEditReply } from "./parseEditReply";
 
 const menu = new Keyboard().text("История").text("Статистика").text("Помощь").resized().persistent();
@@ -63,13 +63,13 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository)
     const target = context.message.reply_to_message;
     if (target) {
       const edit = target.from?.id === context.me.id && "text" in target && typeof target.text === "string" ? parseEditPrompt(target.text) : undefined;
-      if (!edit) return void await context.reply("Ответьте на запрос редактирования, отправленный этим ботом.");
+      if (!edit) return void await context.reply("Ответьте на запрос редактирования, отправленный этим ботом.", { reply_markup: menu });
       const parsed = parseEditReply(edit.field, text.trim());
-      if ("error" in parsed) return void await context.reply(parsed.error);
+      if ("error" in parsed) return void await context.reply(parsed.error, { reply_markup: menu });
       const result = await editExpense(repository, String(context.from.id), edit.expenseId, parsed.edit);
       return void await context.reply(result.kind === Result.ExpenseUpdated ? `Обновлено: ${describe(result.expense)}`
         : result.kind === Result.InvalidInput ? result.message : result.kind === Result.AccessDenied
-          ? accessDeniedText(result.telegramUserId) : "Расход не найден.");
+          ? accessDeniedText(result.telegramUserId) : "Расход не найден.", { reply_markup: menu });
     }
 
     const result = await processExpenseMessage(repository, {
@@ -151,6 +151,13 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository)
         const result = await getExpenseDetails(repository, userId, action.expenseId);
         if (result.kind !== Result.ExpenseDetails) return void (acknowledgement = callbackFailure(result));
         await context.reply(describe(result.expense), { reply_markup: detailButtons(action.expenseId) });
+      } else if (action.kind === "category-list" || action.kind === "edit-actions") {
+        const result = await getExpenseDetails(repository, userId, action.expenseId);
+        if (result.kind !== Result.ExpenseDetails)
+          return void (acknowledgement = callbackFailure(result));
+        await context.editMessageText(action.kind === "category-list" ? `Выберите категорию для расхода #${action.expenseId}:` : describe(result.expense), {
+          reply_markup: action.kind === "category-list" ? categoryButtons(action.expenseId) : detailButtons(action.expenseId)
+        });
       } else if (action.kind === "edit-prompt") {
         const result = await getExpenseDetails(repository, userId, action.expenseId);
         if (result.kind !== Result.ExpenseDetails) return void (acknowledgement = callbackFailure(result));
@@ -273,10 +280,16 @@ function calendarButtons(month: string, startDate?: string): InlineKeyboard {
 }
 
 function detailButtons(expenseId: number): InlineKeyboard {
-  const button = (label: string, action: BotAction) => new InlineKeyboard().text(label, formatCallbackData(action));
-  const keyboard = button("Сумма", { kind: "edit-prompt", expenseId, field: "amount" })
+  return new InlineKeyboard().text("Сумма", formatCallbackData({ kind: "edit-prompt", expenseId, field: "amount" }))
     .text("Дата", formatCallbackData({ kind: "edit-prompt", expenseId, field: "date" }))
-    .text("Комментарий", formatCallbackData({ kind: "edit-prompt", expenseId, field: "comment" })).row();
-  for (const category of categories) keyboard.text(category.name, formatCallbackData({ kind: "edit-category", expenseId, categoryId: category.id })).row();
-  return keyboard.text("Удалить", formatCallbackData({ kind: "delete-request", expenseId }));
+    .text("Комментарий", formatCallbackData({ kind: "edit-prompt", expenseId, field: "comment" })).row()
+    .text("Категория", formatCallbackData({ kind: "category-list", expenseId })).row()
+    .text("Удалить", formatCallbackData({ kind: "delete-request", expenseId }));
+}
+
+function categoryButtons(expenseId: number): InlineKeyboard {
+  const keyboard = new InlineKeyboard();
+  for (const category of categories)
+    keyboard.text(category.name, formatCallbackData({ kind: "edit-category", expenseId, categoryId: category.id })).row();
+  return keyboard.text("Назад", formatCallbackData({ kind: "edit-actions", expenseId }));
 }
