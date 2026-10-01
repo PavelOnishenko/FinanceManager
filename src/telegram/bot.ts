@@ -15,6 +15,7 @@ const help = "Отправьте расход: 2490 продукты Lidl или
 const invalidRangeText = "Конец периода не может быть раньше начала";
 const statisticsStartText = `Статистика доступна с ${firstStatisticsYear} года.`;
 const oldStatisticsYearText = `${statisticsStartText} Откройте её заново.`;
+const percentageFormatter = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
 export function createFinanceBot(token: string, repository: D1FinanceRepository) {
   const bot = new Bot(token);
@@ -237,7 +238,9 @@ function describe(expense: Expense): string {
 }
 
 function statisticsText(result: Extract<Awaited<ReturnType<typeof getStatisticsForRange>>, { kind: typeof Result.ExpenseStatistics }>): string {
-  const lines = result.statistics.categoryTotals.map(category => `${category.categoryName}: ${category.amountRsd} RSD`);
+  const lines = result.statistics.categoryTotals.map(category =>
+    `${category.categoryName}: ${category.amountRsd} RSD (${percentageFormatter.format(category.amountRsd / result.statistics.totalRsd * 100)}%)`
+  );
   return `${result.range.fromDate} — ${result.range.toDate}\nИтого: ${result.statistics.totalRsd} RSD`
     + (lines.length ? `\n${lines.join("\n")}` : "");
 }

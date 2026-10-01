@@ -135,7 +135,7 @@ test("monthly statistics includes boundary dates and lists family categories by 
 
   await fixture.bot.handleUpdate(fixture.callback(700, formatCallbackData({ kind: "statistics-month", month })));
   const report = String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text);
-  assert.match(report, /2026-02-01 — 2026-02-28\nИтого: 4500 RSD\nПродукты: 3000 RSD\nТранспорт: 1500 RSD/);
+  assert.match(report, /2026-02-01 — 2026-02-28\nИтого: 4500 RSD\nПродукты: 3000 RSD \(66,7%\)\nТранспорт: 1500 RSD \(33,3%\)/);
   const reportButtons = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
     inline_keyboard: { callback_data: string }[][]
   }).inline_keyboard;
@@ -207,7 +207,8 @@ test("calendar keeps the start date across months and includes both range bounda
   assert(firstDayButton);
   assert.deepEqual(parseCallbackData(firstDayButton.callback_data), { kind: "calendar-day", month: "2026-03", day: 1, startDate });
   await fixture.bot.handleUpdate(fixture.callback(705, firstDayButton.callback_data));
-  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /2026-02-15 — 2026-03-01\nИтого: 12500 RSD/);
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text),
+    /2026-02-15 — 2026-03-01\nИтого: 12500 RSD\nДругое: 9000 RSD \(72%\)\nПродукты: 2000 RSD \(16%\)\nТранспорт: 1500 RSD \(12%\)/);
   assert.equal(fixture.calls.filter(call => call.method === "answerCallbackQuery").length, 4);
 });
 
