@@ -107,7 +107,7 @@ npm.cmd run dev
 
 Не добавлять универсальный framework команд, event bus, dependency injection container или абстракции «на будущее».
 
-Проверка реализованного шага: `npm.cmd test`, `npm.cmd run check`, `npm.cmd run build` и `npm.cmd run demo:application`. Demo должно показать `directCreated: true`, 18 категорий, `selectedCreated: true`, `duplicateCreated: false`, две записи и статистику предыдущего месяца на 3190 RSD. Реальные Telegram update и удалённая Cloudflare D1 этим не проверяются.
+Проверка реализованного шага: `npm.cmd test`, `npm.cmd run check`, `npm.cmd run build` и `npm.cmd run demo:application`. Demo должно показать `directCreated: true`, 19 категорий, `selectedCreated: true`, `duplicateCreated: false`, две записи и статистику предыдущего месяца на 3190 RSD. Реальные Telegram update и удалённая Cloudflare D1 этим не проверяются.
 
 ### 3. Реализовать Telegram-слой — выполнено локально
 
