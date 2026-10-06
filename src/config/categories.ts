@@ -16,7 +16,8 @@ export const categories = [
   { id: "other", name: "Другое", aliases: ["другое", "прочее"] },
   { id: "gifts", name: "Подарки", aliases: ["подарки", "подарок"] },
   { id: "lost-money", name: "Потерянные деньги", aliases: ["потерянные деньги", "потеряно"] },
-  { id: "subscriptions", name: "Подписки", aliases: ["подписки", "подписка", "сервисы", "сервис"] }
+  { id: "subscriptions", name: "Подписки", aliases: ["подписки", "подписка", "сервисы", "сервис"] },
+  { id: "communication", name: "Связь", aliases: ["связь"] }
 ] as const;
 
 export type CategoryId = (typeof categories)[number]["id"];

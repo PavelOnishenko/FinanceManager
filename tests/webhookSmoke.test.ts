@@ -75,7 +75,7 @@ test("local webhook smoke covers authentication, expenses, editing, deletion and
     assert.equal((await rows())[0]?.comment, "Lidl");
     await accepted(message(401, "700"));
     const categoryButtons = (await lastCall("sendMessage"))?.payload.reply_markup as { inline_keyboard: { callback_data: string }[][] };
-    assert.equal(categoryButtons.inline_keyboard.length, 18);
+    assert.equal(categoryButtons.inline_keyboard.length, 19);
     await accepted(callback(402, categoryButtons.inline_keyboard[0]![0]!.callback_data));
     await accepted(callback(403, categoryButtons.inline_keyboard[1]![0]!.callback_data));
     assert.equal((await rows()).length, 2);
