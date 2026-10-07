@@ -10,5 +10,17 @@
       "database_id": "321e1e7d-60b9-487e-b8aa-493da129bcba",
       "migrations_dir": "migrations"
     }
-  ]
+  ],
+  "env": {
+    "demo": {
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "family-finance-bot-demo",
+          "database_id": "d1c96e28-d113-4813-9c88-e63539c3c111",
+          "migrations_dir": "migrations"
+        }
+      ]
+    }
+  }
 }
