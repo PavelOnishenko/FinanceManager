@@ -27,6 +27,9 @@ The local integration tests use a temporary D1 database and a simulated Telegram
 
 Technical decisions are documented in [docs/TECHNICAL_DESIGN.md](docs/TECHNICAL_DESIGN.md).
 
+The proposed plan for editable categories, currency display, configurable timezone, and independent family deployment
+is in [docs/INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md](docs/INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md).
+
 ## HOW TO RELEASE:
 npm.cmd test
 npm.cmd run check
