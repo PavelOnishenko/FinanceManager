@@ -1,33 +1,31 @@
 export const categories = [
-  { id: "groceries", name: "Продукты", aliases: ["продукты", "продукт"] },
-  { id: "snacks", name: "Снеки и сладости", aliases: ["снеки и сладости", "снеки", "сладости"] },
-  { id: "restaurants", name: "Рестораны", aliases: ["рестораны", "ресторан", "кафе"] },
-  { id: "entertainment", name: "Развлечения", aliases: ["развлечения", "развлечение"] },
-  { id: "household", name: "Товары для дома", aliases: ["товары для дома", "для дома", "дом"] },
-  { id: "electronics", name: "Техника", aliases: ["техника", "электроника"] },
-  { id: "documents", name: "Документы", aliases: ["документы", "документ"] },
-  { id: "business", name: "Фирмы", aliases: ["фирмы", "фирма", "ип", "бизнес"] },
-  { id: "health", name: "Здоровье", aliases: ["здоровье", "медицина"] },
-  { id: "personal-care", name: "Гигиена и красота", aliases: ["гигиена и красота", "гигиена", "красота"] },
-  { id: "transport", name: "Транспорт", aliases: ["транспорт"] },
-  { id: "clothes", name: "Одежда", aliases: ["одежда"] },
-  { id: "nicotine", name: "Никотин", aliases: ["никотин"] },
-  { id: "utilities", name: "Коммунальные услуги", aliases: ["коммунальные услуги", "коммуналка", "коммунальные"] },
-  { id: "other", name: "Другое", aliases: ["другое", "прочее"] },
-  { id: "gifts", name: "Подарки", aliases: ["подарки", "подарок"] },
-  { id: "lost-money", name: "Потерянные деньги", aliases: ["потерянные деньги", "потеряно"] },
-  { id: "subscriptions", name: "Подписки", aliases: ["подписки", "подписка", "сервисы", "сервис"] },
-  { id: "communication", name: "Связь", aliases: ["связь"] }
+  { id: "groceries", name: "Продукты" },
+  { id: "snacks", name: "Снеки и сладости" },
+  { id: "restaurants", name: "Рестораны" },
+  { id: "entertainment", name: "Развлечения" },
+  { id: "household", name: "Товары для дома" },
+  { id: "electronics", name: "Техника" },
+  { id: "documents", name: "Документы" },
+  { id: "business", name: "Фирмы" },
+  { id: "health", name: "Здоровье" },
+  { id: "personal-care", name: "Гигиена и красота" },
+  { id: "transport", name: "Транспорт" },
+  { id: "clothes", name: "Одежда" },
+  { id: "nicotine", name: "Никотин" },
+  { id: "utilities", name: "Коммунальные услуги" },
+  { id: "other", name: "Другое" },
+  { id: "gifts", name: "Подарки" },
+  { id: "lost-money", name: "Потерянные деньги" },
+  { id: "subscriptions", name: "Подписки" },
+  { id: "communication", name: "Связь" }
 ] as const;
 
 export type CategoryId = (typeof categories)[number]["id"];
 
 const plainCategoryTextPattern = /^[\p{L}\p{N} ]+$/u;
 
-for (const category of categories) {
+for (const category of categories)
   assertPlainCategoryText(category.name, `Category ${category.id}`);
-  for (const alias of category.aliases) assertPlainCategoryText(alias, `Alias of category ${category.id}`);
-}
 
 export function assertPlainCategoryText(value: string, label: string): void {
   if (!plainCategoryTextPattern.test(value))

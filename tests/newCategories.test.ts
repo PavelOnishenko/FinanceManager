@@ -5,10 +5,10 @@ import { createMigratedLocalD1 } from "../scripts/createLocalD1";
 
 test("keeps new expense categories aligned between configuration and D1", async () => {
   const expectedCategories = [
-    { id: "gifts", name: "Подарки", aliases: ["подарки", "подарок"], sortOrder: 16 },
-    { id: "lost-money", name: "Потерянные деньги", aliases: ["потерянные деньги", "потеряно"], sortOrder: 17 },
-    { id: "subscriptions", name: "Подписки", aliases: ["подписки", "подписка", "сервисы", "сервис"], sortOrder: 18 },
-    { id: "communication", name: "Связь", aliases: ["связь"], sortOrder: 19 }
+    { id: "gifts", name: "Подарки", sortOrder: 16 },
+    { id: "lost-money", name: "Потерянные деньги", sortOrder: 17 },
+    { id: "subscriptions", name: "Подписки", sortOrder: 18 },
+    { id: "communication", name: "Связь", sortOrder: 19 }
   ];
   assert.deepEqual(categories.slice(-4), expectedCategories.map(({ sortOrder, ...category }) => category));
 
@@ -18,7 +18,7 @@ test("keeps new expense categories aligned between configuration and D1", async 
       SELECT id, name, sort_order AS sortOrder FROM categories
       WHERE id IN ('gifts', 'lost-money', 'subscriptions', 'communication') ORDER BY sort_order
     `).many<{ id: string; name: string; sortOrder: number }>();
-    assert.deepEqual(rows, expectedCategories.map(({ aliases, ...category }) => category));
+    assert.deepEqual(rows, expectedCategories);
   } finally {
     await localD1.dispose();
   }

@@ -1,8 +1,9 @@
 # Independent family deployment: implementation plan
 
-Status: proposed, not implemented. Repository inspection and provider documentation review: October 10, 2026.
+Status: P0 implemented and locally verified on October 11, 2026; remaining phases are proposed, not implemented.
+Repository inspection and provider documentation review: October 10, 2026.
 
-This document is a standalone implementation handoff. Its checkboxes describe future work, not completed features.
+This document is a standalone implementation handoff. Checked boxes describe completed work; unchecked boxes describe future work.
 No installer, release package, update flow, or customer-account deployment has been verified yet.
 
 ## How to read and implement this plan
@@ -111,19 +112,22 @@ These tasks do not add filtering, income, conversion, or a general database admi
 
 ### Task P0: Remove existing category aliases
 
-- [ ] Remove the `aliases` arrays and alias-validation loop from `src/config/categories.ts`; keep the current IDs and display names.
-- [ ] Remove `categoryAliases`, alias sorting, and alias matching from `src/domain/parseExpenseInput.ts`.
+- [x] Remove the `aliases` arrays and alias-validation loop from `src/config/categories.ts`; keep the current IDs and display names.
+- [x] Remove `categoryAliases`, alias sorting, and alias matching from `src/domain/parseExpenseInput.ts`.
   Match only the category's current display name, ignoring case and repeated spaces, with a whole-name boundary before an optional comment.
   Check longer names first so a shorter name cannot consume the beginning of another category name.
-- [ ] Preserve full-text entry using a category name, amount-only entry followed by a category button, positive-integer amount
+- [x] Preserve full-text entry using a category name, amount-only entry followed by a category button, positive-integer amount
   validation, comments, and existing expense IDs and data. Do not add a database migration for this removal: aliases are only in code.
-- [ ] Replace alias-focused parser tests with name-only tests. Cover case-insensitive and multiword names, optional comments,
+- [x] Replace alias-focused parser tests with name-only tests. Cover case-insensitive and multiword names, optional comments,
   amount-only input, and rejection of former synonyms such as `кафе`, `коммуналка`, and `сервис`.
   Update affected Telegram/application tests and any examples or help text that rely on an old synonym.
-- [ ] Run the relevant tests, full test suite, type check, and build. Verify that the new parser behavior works before starting P1.
+- [x] Run the relevant tests, full test suite, type check, and build. Verify that the new parser behavior works before starting P1.
 
 Acceptance gate: no production alias fields, lookup logic, or tests expecting alias acceptance remain; category-name entry and
 button-based entry both work, and former synonym-only inputs are rejected. P0 changes no database rows or schema.
+
+P0 verification (October 11, 2026): `npm.cmd test` passed 72/72 tests, `npm.cmd run check` passed, and
+`npm.cmd run build` passed (Worker dry run). No database migrations or remote deployment were performed.
 
 ### Task P1: Manage categories inside the bot
 
@@ -676,7 +680,7 @@ Stay on Free unless measurements justify an explicit owner-approved upgrade. Rec
 
 ## 12. Completion checklist
 
-- [ ] P0 is complete before P1/P2/P3: alias configuration and parsing code are removed, name-only entry works, and former synonyms fail.
+- [x] P0 is complete before P1/P2/P3: alias configuration and parsing code are removed, name-only entry works, and former synonyms fail.
 - [ ] Category management works inside the bot for both enabled members, including safe archive/restore.
 - [ ] Archived categories cannot be selected for new expenses or category changes; existing expenses remain in history and statistics.
 - [ ] Full-text expense input matches the current category name without aliases; amount-only input still offers category buttons.
