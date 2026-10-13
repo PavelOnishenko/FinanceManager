@@ -1,6 +1,7 @@
+import { expectRepositorySuccess } from "./repositoryAssertions";
 import assert from "node:assert/strict";
 import test from "node:test";
-import { categories } from "../src/config/categories";
+import { categories } from "./defaultCategories";
 import {
   ApplicationResultKind, checkAccess, createExpenseAfterCategorySelection, deleteExpense, editExpense, getExpenseDetails, getExpenseHistory,
   getPreviousMonthStatistics, getStatisticsForRange, processExpenseMessage
@@ -165,15 +166,15 @@ test("calculates the previous Belgrade calendar month", async () => {
   try {
     const telegramUserId = "701";
     await seedMember(context.DB, telegramUserId, "Анна", 1);
-    await context.repository.createExpense({
+    expectRepositorySuccess(await context.repository.createExpense({
       sourceActionKey: "previous-start", amountRsd: 1000, categoryId: "groceries", spentOn: "2026-02-01", createdBy: telegramUserId
-    });
-    await context.repository.createExpense({
+    }));
+    expectRepositorySuccess(await context.repository.createExpense({
       sourceActionKey: "previous-end", amountRsd: 500, categoryId: "transport", spentOn: "2026-02-28", createdBy: telegramUserId
-    });
-    await context.repository.createExpense({
+    }));
+    expectRepositorySuccess(await context.repository.createExpense({
       sourceActionKey: "current", amountRsd: 9000, categoryId: "other", spentOn: "2026-03-01", createdBy: telegramUserId
-    });
+    }));
     const result = await getPreviousMonthStatistics(context.repository, telegramUserId, new Date("2026-03-15T12:00:00.000Z"));
     assert.deepEqual(result, {
       kind: ApplicationResultKind.ExpenseStatistics, range: { fromDate: "2026-02-01", toDate: "2026-02-28" },
@@ -195,12 +196,12 @@ test("uses inclusive custom date ranges and rejects invalid calendar ranges", as
   try {
     const telegramUserId = "801";
     await seedMember(context.DB, telegramUserId, "Анна", 1);
-    await context.repository.createExpense({
+    expectRepositorySuccess(await context.repository.createExpense({
       sourceActionKey: "range-start", amountRsd: 400, categoryId: "groceries", spentOn: "2026-09-10", createdBy: telegramUserId
-    });
-    await context.repository.createExpense({
+    }));
+    expectRepositorySuccess(await context.repository.createExpense({
       sourceActionKey: "range-end", amountRsd: 600, categoryId: "transport", spentOn: "2026-09-12", createdBy: telegramUserId
-    });
+    }));
     const result = await getStatisticsForRange(context.repository, telegramUserId, { fromDate: "2026-09-10", toDate: "2026-09-12" });
     assert(result.kind === ApplicationResultKind.ExpenseStatistics);
     assert.equal(result.statistics.totalRsd, 1000);

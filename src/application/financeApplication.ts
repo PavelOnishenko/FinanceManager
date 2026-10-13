@@ -1,7 +1,8 @@
-import { categories, type CategoryId } from "../config/categories";
+import type { CategoryId } from "../config/categories";
 import { parseExpenseInput } from "../domain/parseExpenseInput";
 import { createExpenseActionKey } from "../domain/sourceActionKey";
-import type { D1FinanceRepository, Expense, Member } from "../storage/D1FinanceRepository";
+import type { CreateExpenseInput, D1FinanceRepository, Expense, Member } from "../storage/D1FinanceRepository";
+import { repositoryFailureToInvalidInput } from "./repositoryFailure";
 import { getDateInFinanceTimeZone, getPreviousCalendarMonthRange, isValidCalendarDate, isValidInclusiveDateRange, type DateRange } from "./dateRange";
 
 export const ApplicationResultKind = {
@@ -22,6 +23,9 @@ export type AccessResult = { kind: typeof ApplicationResultKind.AccessAllowed; m
 export type AccessDenied = { kind: typeof ApplicationResultKind.AccessDenied; telegramUserId: string };
 export type InvalidInput = { kind: typeof ApplicationResultKind.InvalidInput; message: string };
 export type ExpenseSaved = { kind: typeof ApplicationResultKind.ExpenseSaved; expense: Expense; created: boolean };
+export type ExpenseEditResult = AccessDenied | InvalidInput
+  | { kind: typeof ApplicationResultKind.ExpenseUpdated; expense: Expense }
+  | { kind: typeof ApplicationResultKind.ExpenseNotFound; expenseId: number };
 export type ExpenseMessageResult = AccessDenied | InvalidInput | ExpenseSaved | {
   kind: typeof ApplicationResultKind.CategorySelection;
   sourceUpdateId: number;
@@ -51,9 +55,6 @@ type CreateExpenseWithCategoryInput = {
   currentTime: Date;
 };
 
-const categoryOptions = categories.map(({ id, name }) => ({ id, name }));
-const categoryIds = new Set<CategoryId>(categories.map(category => category.id));
-
 export async function checkAccess(repository: D1FinanceRepository, telegramUserId: string): Promise<AccessResult> {
   const member = await repository.getEnabledMember(telegramUserId);
   return member ? { kind: ApplicationResultKind.AccessAllowed, member } : { kind: ApplicationResultKind.AccessDenied, telegramUserId };
@@ -65,16 +66,16 @@ export async function processExpenseMessage(repository: D1FinanceRepository, inp
 
   const sourceActionKey = getSourceActionKey(input.sourceUpdateId);
   if (!sourceActionKey) return invalidSourceUpdateId();
-  const parsed = parseExpenseInput(input.text);
+  const categoryOptions = await repository.getCategories();
+  const parsed = parseExpenseInput(input.text, categoryOptions);
   if (parsed.kind === "invalid") return { kind: ApplicationResultKind.InvalidInput, message: parsed.message };
   if (parsed.kind === "amount") 
     return { kind: ApplicationResultKind.CategorySelection, sourceUpdateId: input.sourceUpdateId, amountRsd: parsed.amountRsd, categories: categoryOptions };
 
-  const saved = await repository.createExpense({
+  return saveExpense(repository, {
     sourceActionKey, amountRsd: parsed.amountRsd, categoryId: parsed.categoryId, spentOn: getDateInFinanceTimeZone(input.currentTime),
     comment: parsed.comment, createdBy: access.member.telegramUserId
   });
-  return { kind: ApplicationResultKind.ExpenseSaved, ...saved };
 }
 
 export async function createExpenseAfterCategorySelection(repository: D1FinanceRepository, input: CreateExpenseWithCategoryInput)
@@ -84,13 +85,13 @@ export async function createExpenseAfterCategorySelection(repository: D1FinanceR
   const sourceActionKey = getSourceActionKey(input.sourceUpdateId);
   if (!sourceActionKey) return invalidSourceUpdateId();
   if (!isPositiveRsdAmount(input.amountRsd)) return { kind: ApplicationResultKind.InvalidInput, message: "Сумма должна быть целым положительным числом в RSD." };
-  if (!categoryIds.has(input.categoryId)) return { kind: ApplicationResultKind.InvalidInput, message: "Неизвестная категория расхода." };
+  if (!(await repository.getCategory(input.categoryId))?.active)
+    return { kind: ApplicationResultKind.InvalidInput, message: "Категория недоступна. Выберите активную категорию заново." };
 
-  const saved = await repository.createExpense({
+  return saveExpense(repository, {
     sourceActionKey, amountRsd: input.amountRsd, categoryId: input.categoryId, spentOn: getDateInFinanceTimeZone(input.currentTime),
     createdBy: access.member.telegramUserId
   });
-  return { kind: ApplicationResultKind.ExpenseSaved, ...saved };
 }
 
 export async function getExpenseHistory(repository: D1FinanceRepository, telegramUserId: string) {
@@ -106,7 +107,7 @@ export async function getExpenseDetails(repository: D1FinanceRepository, telegra
   return expense ? { kind: ApplicationResultKind.ExpenseDetails, expense } : { kind: ApplicationResultKind.ExpenseNotFound, expenseId };
 }
 
-export async function editExpense(repository: D1FinanceRepository, telegramUserId: string, expenseId: number, edit: ExpenseEdit) {
+export async function editExpense(repository: D1FinanceRepository, telegramUserId: string, expenseId: number, edit: ExpenseEdit): Promise<ExpenseEditResult> {
   const access = await checkAccess(repository, telegramUserId);
   if (access.kind === ApplicationResultKind.AccessDenied) return access;
   if (!Number.isSafeInteger(expenseId) || expenseId <= 0) return invalidExpenseId();
@@ -116,8 +117,14 @@ export async function editExpense(repository: D1FinanceRepository, telegramUserI
     if (!isPositiveRsdAmount(edit.amountRsd)) return { kind: ApplicationResultKind.InvalidInput, message: "Сумма должна быть целым положительным числом в RSD." };
     expense = await repository.updateExpenseAmount(expenseId, edit.amountRsd);
   } else if (edit.field === "category") {
-    if (!categoryIds.has(edit.categoryId)) return { kind: ApplicationResultKind.InvalidInput, message: "Неизвестная категория расхода." };
-    expense = await repository.updateExpenseCategory(expenseId, edit.categoryId);
+    if (!(await repository.getCategory(edit.categoryId))?.active)
+      return { kind: ApplicationResultKind.InvalidInput, message: "Категория недоступна. Выберите активную категорию заново." };
+    const result = await repository.updateExpenseCategory(expenseId, edit.categoryId);
+    if (result.kind === "expense-not-found")
+      return { kind: ApplicationResultKind.ExpenseNotFound, expenseId };
+    if (result.kind !== "success")
+      return repositoryFailureToInvalidInput(result);
+    expense = result.value;
   } else if (edit.field === "date") {
     if (!isValidCalendarDate(edit.spentOn)) return { kind: ApplicationResultKind.InvalidInput, message: "Дата должна существовать и иметь формат ГГГГ-ММ-ДД." };
     expense = await repository.updateExpenseDate(expenseId, edit.spentOn);
@@ -144,6 +151,11 @@ export async function getStatisticsForRange(repository: D1FinanceRepository, tel
   if (!isValidInclusiveDateRange(range.fromDate, range.toDate))
     return { kind: ApplicationResultKind.InvalidInput, message: "Укажите существующий включительный диапазон дат." };
   return { kind: ApplicationResultKind.ExpenseStatistics, range, statistics: await repository.getStatistics(range.fromDate, range.toDate) };
+}
+
+async function saveExpense(repository: D1FinanceRepository, input: CreateExpenseInput): Promise<ExpenseSaved | InvalidInput> {
+  const result = await repository.createExpense(input);
+  return result.kind === "success" ? { kind: ApplicationResultKind.ExpenseSaved, ...result.value } : repositoryFailureToInvalidInput(result);
 }
 
 function getSourceActionKey(sourceUpdateId: number): string | undefined {

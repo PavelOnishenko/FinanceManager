@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { categories } from "../src/config/categories";
+import { categories } from "./defaultCategories";
 import { createMigratedLocalD1 } from "../scripts/createLocalD1";
 
 test("keeps new expense categories aligned between configuration and D1", async () => {

@@ -17,9 +17,11 @@ try {
   };
   const first = await repository.createExpense(input);
   const duplicate = await repository.createExpense(input);
+  if (first.kind !== "success" || duplicate.kind !== "success")
+    throw new Error(`Storage demo failed: ${first.kind}, ${duplicate.kind}`);
   console.log(JSON.stringify(
     { 
-      firstCreated: first.created, duplicateCreated: duplicate.created, history: await repository.getRecentExpenses(), 
+      firstCreated: first.value.created, duplicateCreated: duplicate.value.created, history: await repository.getRecentExpenses(),
       statistics: await repository.getStatistics("2026-09-17", "2026-09-17") 
     }, 
     null, 2));

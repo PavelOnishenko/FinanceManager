@@ -1,4 +1,4 @@
-import { categories, type CategoryId } from "../config/categories";
+import type { CategoryOption, CategoryId } from "../config/categories";
 
 // todo typify kind field similar to ApplicationResultKind?
 export type ParsedExpenseInput =
@@ -6,17 +6,15 @@ export type ParsedExpenseInput =
   | { kind: "expense"; amountRsd: number; categoryId: CategoryId; comment?: string }
   | { kind: "invalid"; message: string };
 
-const categoriesByNameLength = [...categories].sort((left, right) => right.name.length - left.name.length);
-
-export function parseExpenseInput(input: string): ParsedExpenseInput {
+export function parseExpenseInput(input: string, activeCategories: readonly CategoryOption[]): ParsedExpenseInput {
   const normalizedInput = input.trim().replace(/\s+/g, " ");
   if (!normalizedInput) return { kind: "invalid", message: "Введите сумму расхода." };
 
   const amount = parseRsdAmount(normalizedInput);
   if (amount !== undefined) return { kind: "amount", amountRsd: amount };
 
-  for (const { name, id } of categoriesByNameLength) {
-    const match = normalizedInput.match(new RegExp(`^([0-9][0-9 ]*) ${name.trim().replace(/ +/g, " ")}(?: (.*))?$`, "iu"));
+  for (const { name, id } of [...activeCategories].sort((left, right) => right.name.length - left.name.length)) {
+    const match = normalizedInput.match(new RegExp(`^([0-9][0-9 ]*) ${name}(?: (.*))?$`, "i"));
     if (!match)
       continue;
 

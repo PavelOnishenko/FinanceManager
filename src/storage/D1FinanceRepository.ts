@@ -1,6 +1,12 @@
-import type { CategoryId } from "../config/categories";
+import { isValidCategoryId, validateCategoryName, type CategoryId, type CategoryOption, type InvalidCategoryName } from "../config/categories";
 import type { SqlDatabase, SqlValue } from "./SqlDatabase";
 export type Member = { telegramUserId: string; displayName: string };
+export type Category = CategoryOption & { active: boolean; sortOrder: number };
+
+export type RepositoryFailure = InvalidCategoryName | {
+  kind: "invalid-category-id" | "category-not-found" | "category-name-taken" | "category-unavailable" | "expense-not-found"
+};
+export type RepositoryResult<Value> = { kind: "success"; value: Value } | RepositoryFailure;
 
 export type Expense = {
   id: number;
@@ -54,6 +60,67 @@ const expenseSelect = `
 export class D1FinanceRepository {
   constructor(private readonly database: SqlDatabase) {}
 
+  async getCategories(active = true): Promise<CategoryOption[]> {
+    return this.database.prepare("SELECT id, name FROM categories WHERE active = ? ORDER BY sort_order, id")
+      .bind(Number(active)).many<CategoryOption>();
+  }
+
+  async getCategory(categoryId: CategoryId): Promise<Category | null> {
+    if (!isValidCategoryId(categoryId))
+      return null;
+    const row = await this.database.prepare("SELECT id, name, active, sort_order AS sortOrder FROM categories WHERE id = ?")
+      .bind(categoryId).one<CategoryOption & { active: number; sortOrder: number }>();
+    return row ? { ...row, active: row.active === 1 } : null;
+  }
+
+  async addCategory(value: string): Promise<RepositoryResult<CategoryOption>> {
+    const validation = validateCategoryName(value);
+    if (validation.kind === "invalid-category-name")
+      return validation;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const id = `u_${btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(9)))).replaceAll("+", "-").replaceAll("/", "_")}`;
+      try {
+        const result = await this.database.prepare(`
+          INSERT INTO categories (id, name, name_key, sort_order)
+          SELECT ?, ?, ?, COALESCE(MAX(sort_order), 0) + 1 FROM categories WHERE 1
+          ON CONFLICT(id) DO NOTHING`).bind(id, validation.name, validation.nameKey).execute();
+        if (result.changedRows === 1)
+          return { kind: "success", value: { id, name: validation.name } };
+      } catch (error) {
+        return this.categoryWriteFailureOrThrow(error);
+      }
+    }
+    throw new Error("Could not generate a unique category ID");
+  }
+
+  async renameCategory(categoryId: CategoryId, value: string): Promise<RepositoryResult<void>> {
+    const validation = validateCategoryName(value);
+    if (validation.kind === "invalid-category-name")
+      return validation;
+    if (!isValidCategoryId(categoryId))
+      return { kind: "invalid-category-id" };
+    try {
+      const result = await this.database.prepare("UPDATE categories SET name = ?, name_key = ? WHERE id = ?")
+        .bind(validation.name, validation.nameKey, categoryId).execute();
+      return result.changedRows ? { kind: "success", value: undefined } : { kind: "category-not-found" };
+    } catch (error) {
+      return this.categoryWriteFailureOrThrow(error);
+    }
+  }
+
+  async setCategoryActive(categoryId: CategoryId, active: boolean): Promise<RepositoryResult<void>> {
+    if (!isValidCategoryId(categoryId))
+      return { kind: "invalid-category-id" };
+    const result = await this.database.prepare("UPDATE categories SET active = ? WHERE id = ?").bind(Number(active), categoryId).execute();
+    return result.changedRows ? { kind: "success", value: undefined } : { kind: "category-not-found" };
+  }
+
+  private categoryWriteFailureOrThrow(error: unknown): RepositoryFailure {
+    if (/UNIQUE constraint failed: categories\.(?:name_key|name)\b/.test(String(error)))
+      return { kind: "category-name-taken" };
+    throw error;
+  }
+
   async getEnabledMember(telegramUserId: string): Promise<Member | null> {
     const row = await this.database.prepare(`
       SELECT telegram_user_id, display_name FROM members
@@ -61,17 +128,21 @@ export class D1FinanceRepository {
     return row ? { telegramUserId: row.telegram_user_id, displayName: row.display_name } : null;
   }
 
-  async createExpense(input: CreateExpenseInput): Promise<{ expense: Expense; created: boolean }> {
+  async createExpense(input: CreateExpenseInput): Promise<RepositoryResult<{ expense: Expense; created: boolean }>> {
+    if (!isValidCategoryId(input.categoryId))
+      return { kind: "invalid-category-id" };
     const session = this.database.withPrimarySession();
     const result = await session.prepare(`
       INSERT INTO expenses (source_action_key, amount_rsd, category_id, spent_on, comment, created_by, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+      SELECT ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE EXISTS (SELECT 1 FROM categories WHERE id = ? AND active = 1)
       ON CONFLICT(source_action_key) DO NOTHING`).bind(
-      input.sourceActionKey, input.amountRsd, input.categoryId, input.spentOn, input.comment ?? null, input.createdBy
+      input.sourceActionKey, input.amountRsd, input.categoryId, input.spentOn, input.comment ?? null, input.createdBy, input.categoryId
     ).execute();
     const row = await session.prepare(`${expenseSelect} WHERE e.source_action_key = ?`).bind(input.sourceActionKey).one<ExpenseRow>();
-    if (!row) throw new Error(`Expense was not found after create: ${input.sourceActionKey}`);
-    return { expense: mapExpense(row), created: result.changedRows === 1 };
+    if (!row)
+      return { kind: "category-unavailable" };
+    return { kind: "success", value: { expense: mapExpense(row), created: result.changedRows === 1 } };
   }
 
   async getExpenseById(expenseId: number): Promise<Expense | null> {
@@ -88,8 +159,17 @@ export class D1FinanceRepository {
     return this.updateExpense(expenseId, "amount_rsd = ?", amountRsd);
   }
 
-  async updateExpenseCategory(expenseId: number, categoryId: CategoryId): Promise<Expense | null> {
-    return this.updateExpense(expenseId, "category_id = ?", categoryId);
+  async updateExpenseCategory(expenseId: number, categoryId: CategoryId): Promise<RepositoryResult<Expense>> {
+    if (!isValidCategoryId(categoryId))
+      return { kind: "invalid-category-id" };
+    const session = this.database.withPrimarySession();
+    const result = await session.prepare(`
+      UPDATE expenses SET category_id = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+      WHERE id = ? AND EXISTS (SELECT 1 FROM categories WHERE id = ? AND active = 1)`).bind(categoryId, expenseId, categoryId).execute();
+    const row = await session.prepare(`${expenseSelect} WHERE e.id = ?`).bind(expenseId).one<ExpenseRow>();
+    if (!row)
+      return { kind: "expense-not-found" };
+    return result.changedRows ? { kind: "success", value: mapExpense(row) } : { kind: "category-unavailable" };
   }
 
   async updateExpenseDate(expenseId: number, spentOn: string): Promise<Expense | null> {

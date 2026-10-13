@@ -1,8 +1,9 @@
+import { expectRepositorySuccess } from "./repositoryAssertions";
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { Chat, Message, Update, User, UserFromGetMe } from "grammy/types";
-import { categories } from "../src/config/categories";
-import { formatCallbackData, parseCallbackData, type BotAction } from "../src/telegram/callbackData";
+import { categories } from "./defaultCategories";
+import { formatCallbackData, parseCallbackData } from "../src/telegram/callbackData";
 import { createFinanceBot } from "../src/telegram/bot";
 import { createMigratedLocalD1 } from "../scripts/createLocalD1";
 import { D1FinanceRepository } from "../src/storage/D1FinanceRepository";
@@ -57,48 +58,8 @@ async function createTelegramFixture(userId: number, botId: number) {
 function assertMenuShown(calls: TelegramApiCall[]) {
   const keyboard = calls.findLast(call => call.method === "sendMessage")?.payload.reply_markup as { keyboard: { text: string }[][] } | undefined;
   assert(keyboard);
-  assert.deepEqual(keyboard.keyboard[0]?.map(button => button.text), ["История", "Статистика", "Помощь"]);
+  assert.deepEqual(keyboard.keyboard[0]?.map(button => button.text), ["История", "Статистика", "Категории", "Помощь"]);
 }
-
-test("callback actions round-trip within Telegram's 64-byte limit", () => {
-  const actions: BotAction[] = [
-    { kind: "calendar-noop" },
-    { kind: "create", sourceUpdateId: 9007199254740991, amountRsd: 9007199254740991, categoryId: "personal-care" },
-    { kind: "details", expenseId: 23 }, { kind: "category-list", expenseId: 23 }, { kind: "edit-actions", expenseId: 23 },
-    { kind: "delete-request", expenseId: 23 }, { kind: "delete-confirm", expenseId: 23 },
-    { kind: "edit-prompt", expenseId: 23, field: "comment" }, { kind: "edit-category", expenseId: 23, categoryId: "groceries" },
-    { kind: "statistics-month", month: "2026-02" }, { kind: "calendar", month: "2026-03", startDate: "2026-02-28" },
-    { kind: "calendar-day", month: "2026-03", day: 1, startDate: "2026-02-28" }
-  ];
-  for (const action of actions) {
-    const data = formatCallbackData(action);
-    assert.deepEqual(parseCallbackData(data), action);
-    assert(new TextEncoder().encode(data).length <= 64);
-  }
-});
-
-test("rejects a create callback with a zero source update ID", () => {
-  assert.equal(parseCallbackData("c:0:2490:0"), undefined);
-});
-
-test("rejects a create callback with a category index outside the category list", () => {
-  assert.equal(parseCallbackData(`c:41:2490:${categories.length}`), undefined);
-});
-
-test("rejects a details callback with an extra field", () => {
-  assert.equal(parseCallbackData("d:1:extra"), undefined);
-});
-
-test("rejects invalid calendar callback dates and months", () => {
-  assert.equal(parseCallbackData("s:202613"), undefined);
-  assert.equal(parseCallbackData("k:202602:20260229"), undefined);
-  assert.equal(parseCallbackData("t:202602:0:30"), undefined);
-  assert.equal(parseCallbackData("t:202602:0:0"), undefined);
-  assert.equal(parseCallbackData("s:202602:extra"), undefined);
-  assert.deepEqual(parseCallbackData("s:202512"), { kind: "statistics-year-too-old" });
-  assert.deepEqual(parseCallbackData("k:000001:0"), { kind: "statistics-year-too-old" });
-  assert.deepEqual(parseCallbackData("t:202601:20251231:1"), { kind: "statistics-year-too-old" });
-});
 
 test("January 2026 has no previous-month button and old buttons explain the limit", async context => {
   const userId = 127;
@@ -127,11 +88,16 @@ test("monthly statistics includes boundary dates and lists family categories by 
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await addMember(fixture.database.DB, otherUserId, "Борис", 1);
-  await fixture.repository.createExpense({ sourceActionKey: "before", amountRsd: 900, categoryId: "other", spentOn: "2026-01-31", createdBy: String(userId) });
-  await fixture.repository.createExpense({ sourceActionKey: "start", amountRsd: 1000, categoryId: "groceries", spentOn: "2026-02-01", createdBy: String(userId) });
-  await fixture.repository.createExpense({ sourceActionKey: "middle", amountRsd: 1500, categoryId: "transport", spentOn: "2026-02-15", createdBy: String(otherUserId) });
-  await fixture.repository.createExpense({ sourceActionKey: "end", amountRsd: 2000, categoryId: "groceries", spentOn: "2026-02-28", createdBy: String(otherUserId) });
-  await fixture.repository.createExpense({ sourceActionKey: "after", amountRsd: 9000, categoryId: "other", spentOn: "2026-03-01", createdBy: String(userId) });
+  expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "before", amountRsd: 900, categoryId: "other", spentOn: "2026-01-31", createdBy: String(userId) }));
+  expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "start", amountRsd: 1000, categoryId: "groceries", spentOn: "2026-02-01", createdBy: String(userId) }));
+  expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "middle", amountRsd: 1500, categoryId: "transport", spentOn: "2026-02-15", createdBy: String(otherUserId) }));
+  expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "end", amountRsd: 2000, categoryId: "groceries", spentOn: "2026-02-28", createdBy: String(otherUserId) }));
+  expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "after", amountRsd: 9000, categoryId: "other", spentOn: "2026-03-01", createdBy: String(userId) }));
 
   await fixture.bot.handleUpdate(fixture.callback(700, formatCallbackData({ kind: "statistics-month", month })));
   const report = String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text);
@@ -186,11 +152,16 @@ test("calendar keeps the start date across months and includes both range bounda
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await addMember(fixture.database.DB, otherUserId, "Борис", 1);
-  await fixture.repository.createExpense({ sourceActionKey: "before", amountRsd: 1000, categoryId: "other", spentOn: "2026-02-14", createdBy: String(userId) });
-  await fixture.repository.createExpense({ sourceActionKey: "start", amountRsd: 1500, categoryId: "transport", spentOn: startDate, createdBy: String(otherUserId) });
-  await fixture.repository.createExpense({ sourceActionKey: "middle", amountRsd: 2000, categoryId: "groceries", spentOn: "2026-02-28", createdBy: String(userId) });
-  await fixture.repository.createExpense({ sourceActionKey: "end", amountRsd: 9000, categoryId: "other", spentOn: "2026-03-01", createdBy: String(otherUserId) });
-  await fixture.repository.createExpense({ sourceActionKey: "after", amountRsd: 3000, categoryId: "other", spentOn: "2026-03-02", createdBy: String(userId) });
+  expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "before", amountRsd: 1000, categoryId: "other", spentOn: "2026-02-14", createdBy: String(userId) }));
+  expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "start", amountRsd: 1500, categoryId: "transport", spentOn: startDate, createdBy: String(otherUserId) }));
+  expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "middle", amountRsd: 2000, categoryId: "groceries", spentOn: "2026-02-28", createdBy: String(userId) }));
+  expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "end", amountRsd: 9000, categoryId: "other", spentOn: "2026-03-01", createdBy: String(otherUserId) }));
+  expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "after", amountRsd: 3000, categoryId: "other", spentOn: "2026-03-02", createdBy: String(userId) }));
 
   await fixture.bot.handleUpdate(fixture.callback(701, formatCallbackData({ kind: "calendar", month: "2026-02" })));
   await fixture.bot.handleUpdate(fixture.callback(702, formatCallbackData({ kind: "calendar-day", month: "2026-02", day: 15 })));
@@ -279,12 +250,12 @@ test("history shows one button per recent expense", async context => {
   const fixture = await createTelegramFixture(userId, 999);
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
-  await fixture.repository.createExpense({
+  expectRepositorySuccess(await fixture.repository.createExpense({
     sourceActionKey: "history-groceries", amountRsd: 2490, categoryId: "groceries", spentOn: groceriesDate, comment: "Lidl", createdBy: String(userId)
-  });
-  await fixture.repository.createExpense({
+  }));
+  expectRepositorySuccess(await fixture.repository.createExpense({
     sourceActionKey: "history-transport", amountRsd: 700, categoryId: "transport", spentOn: transportDate, comment: "Такси", createdBy: String(userId)
-  });
+  }));
 
   await fixture.bot.handleUpdate(fixture.message(402, "История"));
   const buttons = (fixture.calls.at(-1)?.payload.reply_markup as { inline_keyboard: { text: string }[][] }).inline_keyboard;
@@ -574,3 +545,189 @@ test("unexpected failures include the update ID without exposing internal detail
     console.error = previousError;
   }
 });
+
+
+test("category addition uses ForceReply and enables both expense entry paths", async context => {
+  const userId = 127;
+  const categoryName = "Дети-School 2026";
+  const textAmountRsd = 800;
+  const buttonAmountRsd = 500;
+  const comment = "Учебники";
+  const fixture = await createTelegramFixture(userId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  await fixture.bot.handleUpdate(fixture.message(800, "Категории"));
+  assert.match(String(fixture.calls.at(-1)?.payload.text), /Категории/);
+  await fixture.bot.handleUpdate(fixture.callback(801, "m1:add"));
+  const prompt = fixture.calls.findLast(call => call.method === "sendMessage")!.payload;
+  assert.equal((prompt.reply_markup as { force_reply: boolean }).force_reply, true);
+  await fixture.bot.handleUpdate(fixture.message(802, categoryName, fixture.replyTarget(String(prompt.text), fixture.botInfo)));
+  const category = (await fixture.repository.getCategories()).find(item => item.name === categoryName)!;
+  assert(category);
+  await fixture.bot.handleUpdate(fixture.message(803, `${textAmountRsd} ${categoryName} ${comment}`));
+  const saved = (await fixture.repository.getRecentExpenses())[0]!;
+  assert.equal(saved.categoryId, category.id);
+  assert.equal(saved.comment, comment);
+  await fixture.bot.handleUpdate(fixture.message(804, String(buttonAmountRsd)));
+  const buttons = (fixture.calls.at(-1)?.payload.reply_markup as { inline_keyboard: { text: string; callback_data: string }[][] }).inline_keyboard;
+  const button = buttons.flat().find(item => item.text === categoryName)!;
+  assert.match(button.callback_data, /^c1:/);
+  await fixture.bot.handleUpdate(fixture.callback(805, button.callback_data));
+  assert.equal((await fixture.repository.getRecentExpenses())[0]?.categoryId, category.id);
+  assert.equal((await fixture.repository.getRecentExpenses())[0]?.amountRsd, buttonAmountRsd);
+});
+
+test("another member renames a category through ForceReply and updates historical display names", async context => {
+  const authorId = 127;
+  const editorId = 128;
+  const initialName = "Дети-School 2026";
+  const renamedName = "Образование";
+  const fixture = await createTelegramFixture(editorId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, authorId, "Анна", 1);
+  await addMember(fixture.database.DB, editorId, "Борис", 1);
+  const category = expectRepositorySuccess(await fixture.repository.addCategory(initialName));
+  const saved = expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "before-rename", amountRsd: 800, categoryId: category.id, spentOn: "2026-10-01", createdBy: String(authorId)
+  }));
+  await fixture.bot.handleUpdate(fixture.callback(810, `m1:rename:${category.id}`));
+  const prompt = fixture.calls.findLast(call => call.method === "sendMessage")!.payload;
+  assert.equal((prompt.reply_markup as { force_reply: boolean }).force_reply, true);
+  assert.match(String(prompt.text), /прошлых расходов/);
+  await fixture.bot.handleUpdate(fixture.message(811, renamedName, fixture.replyTarget(String(prompt.text), fixture.botInfo)));
+  assert.equal((await fixture.repository.getExpenseById(saved.expense.id))?.categoryName, renamedName);
+  assert.equal((await fixture.repository.getCategory(category.id))?.name, renamedName);
+  await fixture.bot.handleUpdate(fixture.message(812, `700 ${initialName}`));
+  assert.match(String(fixture.calls.at(-1)?.payload.text), /Не удалось распознать/);
+});
+
+test("category archiving requires confirmation and preserves historical expenses and totals", async context => {
+  const userId = 127;
+  const categoryName = "Образование";
+  const amountRsd = 800;
+  const fixture = await createTelegramFixture(userId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  const category = expectRepositorySuccess(await fixture.repository.addCategory(categoryName));
+  const saved = expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "before-archive", amountRsd, categoryId: category.id, spentOn: "2026-10-01", createdBy: String(userId)
+  }));
+  await fixture.bot.handleUpdate(fixture.callback(820, `m1:archive:${category.id}`));
+  assert.equal((await fixture.repository.getCategory(category.id))?.active, true);
+  assert.match(String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text), /Прошлые расходы останутся/);
+  await fixture.bot.handleUpdate(fixture.callback(821, `m1:confirm:${category.id}`));
+  assert.equal((await fixture.repository.getCategory(category.id))?.active, false);
+  assert.equal((await fixture.repository.getRecentExpenses())[0]?.id, saved.expense.id);
+  assert.equal((await fixture.repository.getStatistics("2026-10-01", "2026-10-31")).totalRsd, amountRsd);
+});
+
+test("archived categories disappear from current expense menus and full-text entry", async context => {
+  const userId = 127;
+  const categoryName = "Образование";
+  const fixture = await createTelegramFixture(userId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  const category = expectRepositorySuccess(await fixture.repository.addCategory(categoryName));
+  const saved = expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "existing-archived", amountRsd: 800, categoryId: category.id, spentOn: "2026-10-01", createdBy: String(userId)
+  }));
+  expectRepositorySuccess(await fixture.repository.setCategoryActive(category.id, false));
+  await fixture.bot.handleUpdate(fixture.message(830, "500"));
+  const creationMenu = (fixture.calls.at(-1)?.payload.reply_markup as { inline_keyboard: { text: string }[][] }).inline_keyboard;
+  assert(!creationMenu.flat().some(button => button.text === categoryName));
+  await fixture.bot.handleUpdate(fixture.callback(831, `l:${saved.expense.id}`));
+  const editingMenu = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
+    inline_keyboard: { text: string }[][]
+  }).inline_keyboard;
+  assert(!editingMenu.flat().some(button => button.text === categoryName));
+  await fixture.bot.handleUpdate(fixture.message(833, `700 ${categoryName}`));
+  assert.match(String(fixture.calls.at(-1)?.payload.text), /Не удалось распознать/);
+  assert.equal((await fixture.repository.getRecentExpenses()).length, 1);
+  assert.equal((await fixture.repository.getExpenseById(saved.expense.id))?.categoryId, category.id);
+});
+
+test("an expense in an archived category can still be edited through ForceReply", async context => {
+  const userId = 127;
+  const initialExpenseDate = "2026-10-01";
+  const finalExpenseDate = "2026-10-02";
+  const fixture = await createTelegramFixture(userId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  const category = expectRepositorySuccess(await fixture.repository.addCategory("Образование"));
+  const saved = expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "edit-archived", amountRsd: 800, categoryId: category.id, spentOn: initialExpenseDate, createdBy: String(userId)
+  }));
+  expectRepositorySuccess(await fixture.repository.setCategoryActive(category.id, false));
+  await fixture.bot.handleUpdate(fixture.callback(840, `p:${saved.expense.id}:1`));
+  const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
+  await fixture.bot.handleUpdate(fixture.message(841, "02.10.2026", fixture.replyTarget(prompt, fixture.botInfo)));
+  assert.equal((await fixture.repository.getExpenseById(saved.expense.id))?.spentOn, finalExpenseDate);
+});
+
+test("another member restores a category from the archive and enables new expense entry", async context => {
+  const authorId = 127;
+  const editorId = 128;
+  const categoryName = "Образование";
+  const originalAmountRsd = 800;
+  const newAmountRsd = 500;
+  const fixture = await createTelegramFixture(editorId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, authorId, "Анна", 1);
+  await addMember(fixture.database.DB, editorId, "Борис", 1);
+  const category = expectRepositorySuccess(await fixture.repository.addCategory(categoryName));
+  expectRepositorySuccess(await fixture.repository.createExpense({
+    sourceActionKey: "before-restore", amountRsd: originalAmountRsd, categoryId: category.id, spentOn: "2026-10-01", createdBy: String(authorId)
+  }));
+  expectRepositorySuccess(await fixture.repository.setCategoryActive(category.id, false));
+  await fixture.bot.handleUpdate(fixture.callback(861, "m1:archived"));
+  assert.match(String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text), /Архив категорий/);
+  await fixture.bot.handleUpdate(fixture.callback(862, `m1:details:${category.id}`));
+  assert.match(JSON.stringify(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.reply_markup), /Восстановить/);
+  await fixture.bot.handleUpdate(fixture.callback(863, `m1:restore:${category.id}`));
+  assert.equal((await fixture.repository.getCategory(category.id))?.active, true);
+  assert.equal((await fixture.repository.getCategories()).find(item => item.id === category.id)?.name, categoryName);
+  await fixture.bot.handleUpdate(fixture.message(864, String(newAmountRsd)));
+  const buttons = (fixture.calls.at(-1)?.payload.reply_markup as { inline_keyboard: { text: string; callback_data: string }[][] }).inline_keyboard;
+  await fixture.bot.handleUpdate(fixture.callback(865, buttons.flat().find(button => button.text === categoryName)!.callback_data));
+  assert.equal((await fixture.repository.getRecentExpenses()).length, 2);
+  assert.equal((await fixture.repository.getRecentExpenses())[0]?.categoryName, categoryName);
+  assert.equal((await fixture.repository.getStatistics("2026-01-01", "2026-12-31")).totalRsd, originalAmountRsd + newAmountRsd);
+});
+
+test("category prompts reject invalid names, duplicates and replies to another sender", async context => {
+  const userId = 129;
+  const fixture = await createTelegramFixture(userId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  await fixture.bot.handleUpdate(fixture.callback(850, "m1:add"));
+  const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
+  await fixture.bot.handleUpdate(fixture.message(851, "Новая категория", fixture.replyTarget(prompt, fixture.user)));
+  assert.match(String(fixture.calls.at(-1)?.payload.text), /запрос редактирования/);
+  for (const name of ["", "Школа!", "123", "Я".repeat(81), "  ПРОДУКТЫ "])
+    await fixture.bot.handleUpdate(fixture.message(852, name, fixture.replyTarget(prompt, fixture.botInfo)));
+  assert.equal((await fixture.repository.getCategories()).length, categories.length);
+  assert.match(String(fixture.calls.at(-1)?.payload.text), /уже существует/);
+  assertMenuShown(fixture.calls);
+});
+
+test("obsolete category buttons explain failure without creating or changing an expense", async context => {
+  const userId = 130;
+  const amountRsd = 500;
+  const categoryId = "groceries";
+  const fixture = await createTelegramFixture(userId, 999);
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  await fixture.bot.handleUpdate(fixture.message(9600, `${amountRsd} продукты`));
+  const saved = (await fixture.repository.getRecentExpenses())[0]!;
+  for (const [index, data] of ["c:9601:700:0", `e:${saved.id}:1`].entries()) {
+    await fixture.bot.handleUpdate(fixture.callback(9602 + index, data));
+    assert.equal(fixture.calls.at(-1)?.method, "answerCallbackQuery");
+    assert.equal(fixture.calls.at(-1)?.payload.text, "Кнопка недействительна");
+    assert.equal(fixture.calls.at(-1)?.payload.show_alert, true);
+    assert.equal(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text, "Кнопка недействительна");
+  }
+  assert.equal((await fixture.repository.getRecentExpenses()).length, 1);
+  assert.equal((await fixture.repository.getExpenseById(saved.id))?.categoryId, categoryId);
+  assert.equal((await fixture.repository.getExpenseById(saved.id))?.amountRsd, amountRsd);
+});
+

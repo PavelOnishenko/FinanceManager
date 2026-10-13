@@ -1,33 +1,18 @@
-export const categories = [
-  { id: "groceries", name: "Продукты" },
-  { id: "snacks", name: "Снеки и сладости" },
-  { id: "restaurants", name: "Рестораны" },
-  { id: "entertainment", name: "Развлечения" },
-  { id: "household", name: "Товары для дома" },
-  { id: "electronics", name: "Техника" },
-  { id: "documents", name: "Документы" },
-  { id: "business", name: "Фирмы" },
-  { id: "health", name: "Здоровье" },
-  { id: "personal-care", name: "Гигиена и красота" },
-  { id: "transport", name: "Транспорт" },
-  { id: "clothes", name: "Одежда" },
-  { id: "nicotine", name: "Никотин" },
-  { id: "utilities", name: "Коммунальные услуги" },
-  { id: "other", name: "Другое" },
-  { id: "gifts", name: "Подарки" },
-  { id: "lost-money", name: "Потерянные деньги" },
-  { id: "subscriptions", name: "Подписки" },
-  { id: "communication", name: "Связь" }
-] as const;
+export type CategoryId = string;
+export type CategoryOption = { id: CategoryId; name: string };
 
-export type CategoryId = (typeof categories)[number]["id"];
+export function isValidCategoryId(value: string): boolean {
+  return /^(?:[a-z][a-z0-9-]{0,19}|u_[A-Za-z0-9_-]{12})$/.test(value);
+}
 
-const plainCategoryTextPattern = /^[\p{L}\p{N} ]+$/u;
+export type InvalidCategoryName = { kind: "invalid-category-name"; reason: "invalid-format" | "missing-letter" };
+export type CategoryNameValidationResult = { kind: "valid-category-name"; name: string; nameKey: string } | InvalidCategoryName;
 
-for (const category of categories)
-  assertPlainCategoryText(category.name, `Category ${category.id}`);
-
-export function assertPlainCategoryText(value: string, label: string): void {
-  if (!plainCategoryTextPattern.test(value))
-    throw new Error(`${label} must contain only letters, numbers and spaces: ${value}`);
+export function validateCategoryName(value: string): CategoryNameValidationResult {
+  const name = value.trim().replace(/ +/g, " ");
+  if (!name || name.length > 80 || /[^A-Za-zА-Яа-яЁё0-9 -]/.test(value))
+    return { kind: "invalid-category-name", reason: "invalid-format" };
+  if (!/[A-Za-zА-Яа-яЁё]/.test(name))
+    return { kind: "invalid-category-name", reason: "missing-letter" };
+  return { kind: "valid-category-name", name, nameKey: name.toLowerCase() };
 }

@@ -1,6 +1,12 @@
 # Independent family deployment: implementation plan
 
-Status: P0 implemented and locally verified on October 11, 2026; remaining phases are proposed, not implemented.
+Status: P0 implemented and locally verified on October 11, 2026. P1 fully completed:
+the owner confirmed live verification in demo and production on October 13, 2026. P2/P3 and installer phases are proposed, not implemented.
+The subsequent P1 repository-result refactor passed 83/83 tests on October 12, 2026. After removing nested ternaries,
+three focused tests, the type check, and the dry-run build passed. Local tests/check/build are authorized;
+commands accessing remote resources require an explicit owner decision.
+Latest P1 simplification (October 12, 2026): strict Russian/English category alphabet with ASCII digits, spaces and hyphens;
+obsolete category-index callbacks are rejected without a legacy ID snapshot. 89/89 tests, type check, and dry-run build passed.
 Repository inspection and provider documentation review: October 10, 2026.
 
 This document is a standalone implementation handoff. Checked boxes describe completed work; unchecked boxes describe future work.
@@ -131,6 +137,8 @@ P0 verification (October 11, 2026): `npm.cmd test` passed 72/72 tests, `npm.cmd 
 
 ### Task P1: Manage categories inside the bot
 
+Status: fully completed. Local checks passed; the owner confirmed verification in demo and production on October 13, 2026.
+
 Implement P1 in this order, applying the plan-wide testing approach where it helps:
 
 1. Add the normalized-name migration and category repository operations; verify fresh and existing databases with expenses.
@@ -140,37 +148,38 @@ Implement P1 in this order, applying the plan-wide testing approach where it hel
 
 The checkboxes below state required behavior across these steps.
 
-- [ ] Define the first-release permission rule: every enabled family member can add, rename, archive, and restore categories.
+- [x] Define the first-release permission rule: every enabled family member can add, rename, archive, and restore categories.
   Apply the existing member access check to every management action and reject unknown/disabled users.
-- [ ] Add a new numbered migration; never rewrite `0001`-`0003` after distribution.
+- [x] Add a new numbered migration; never rewrite `0001`-`0003` after distribution.
   Add a normalized name key to `categories`, populate it for the 19 existing defaults, and enforce uniqueness with an index.
   Keep the existing text primary key and expense foreign key; do not create an alias table or migrate alias data.
-- [ ] Keep the existing stable text IDs for seeded categories. For each user-created category, generate an opaque ID from
+- [x] Keep the existing stable text IDs for seeded categories. For each user-created category, generate an opaque ID from
   nine cryptographically random bytes encoded as 12 base64url characters with a `u_` prefix. Retry on an ID collision;
   enforce uniqueness with the existing primary key. Never derive an ID from the name or list position.
-- [ ] Make D1 the runtime source for active categories, display names, and order.
+- [x] Make D1 the runtime source for active categories, display names, and order.
   Keep default seed data in migrations, then let each database diverge through user edits.
   Replace the compile-time `CategoryId` union with a validated stable string ID at the application/storage boundaries.
-- [ ] Keep category IDs immutable and short enough for Telegram's 64-byte `callback_data` limit.
+- [x] Keep category IDs immutable and short enough for Telegram's 64-byte `callback_data` limit.
   Use a new, explicitly versioned callback format carrying the category ID, rather than a mutable list index.
-  Parse previously sent index-based callbacks against a frozen snapshot of the original 19 IDs, or explain expiry to the user.
+  Owner decision: reject previously sent index-based callbacks with the existing invalid-button reply; users request new buttons.
+  Do not retain a frozen category-ID snapshot or an index decoder.
   Recheck category activity at action time; an old button must not create an expense in a deactivated category.
-- [ ] Load active categories for amount-only buttons, full-text parsing, and expense-category editing.
+- [x] Load active categories for amount-only buttons, full-text parsing, and expense-category editing.
   Read names from D1 for each update or use a cache with explicit invalidation; never rely on an old static array.
   Preserve existing `source_action_key` idempotency when old/new category buttons are tapped more than once.
-- [ ] Add a **Категории** entry to the existing Telegram menu. Show active categories and actions to add, rename,
+- [x] Add a **Категории** entry to the existing Telegram menu. Show active categories and actions to add, rename,
   and archive, plus an archived-category list with **Восстановить**. Use the existing stateless `ForceReply` pattern for text entry
   and a confirmation button for archiving. Explain there that previous expenses stay in history and statistics.
   Avoid calling this operation **Удалить** in the UI.
-- [ ] Change P0's name-only parser to read the current active names from D1. Keep its matching and comment rules unchanged.
-- [ ] Generate the same normalized name key for add/rename and parsing. Reject empty, duplicate, or invalid names with a clear bot reply.
+- [x] Change P0's name-only parser to read the current active names from D1. Keep its matching and comment rules unchanged.
+- [x] Generate the same normalized name key for add/rename and parsing. Reject empty, duplicate, or invalid names with a clear bot reply.
   Enforce uniqueness in D1, including Cyrillic case folding; SQLite `NOCASE` alone is insufficient.
-- [ ] Implement **Архивировать** as `active = 0` and **Восстановить** as `active = 1`. Keep the row and immutable ID; never delete its expenses.
+- [x] Implement **Архивировать** as `active = 0` and **Восстановить** as `active = 1`. Keep the row and immutable ID; never delete its expenses.
   Archived categories disappear from new expense selection, text parsing, and category-change choices. Reject stale buttons
   that try to assign one. Existing expenses in an archived category remain readable and can still have their amount, date,
   and comment edited; moving one to another active category remains possible.
   Keep the archived name reserved to avoid ambiguity on restoration.
-- [ ] State in the UI that renaming changes the displayed category name for historical expenses as well.
+- [x] State in the UI that renaming changes the displayed category name for historical expenses as well.
   History, details, and statistics must include expenses from archived categories, grouped by the immutable category ID.
   Archiving/restoring must not change past totals, percentages, or which expenses appear. The old name stops being
   accepted for new text input after a rename; existing expenses and button-based entry remain intact.
@@ -179,6 +188,49 @@ and archiving/restoring/renaming never removes or misattributes older expenses o
 Existing deployed databases and a fresh D1 both migrate cleanly.
 Apply the migration and updated Worker to the developer's own test/prod environments using the normal release process
 and verify the result; do not claim remote success from local tests.
+
+P1 implementation verification (October 12, 2026): `npm.cmd test` passed 80/80 tests, `npm.cmd run check` passed,
+and `npm.cmd run build` passed (Worker dry run). The two category-management Telegram journeys were rerun and passed
+after simplifying prompt wording. Tests cover both enabled members, access denial, normalized-name conflicts,
+random-ID collision retry, dynamic parsing, legacy/versioned callbacks, archive/restore, and historical totals.
+The dedicated Wrangler test applies `0001`-`0003`, inserts a declared expense and member, applies `0004`, checks every
+stored expense/member field and migration history, repeats migration application, and compares categories with a fresh installation.
+On October 13, 2026, this test was simplified: state queries were combined and the fresh-install comparison removed,
+reducing Wrangler invocations from ten to five. Upgrade preservation and repeat-application checks remain;
+fresh migrated D1 coverage remains in repository tests. The focused migration test and type check passed.
+
+- [x] Local implementation and automated P1 checks.
+- [x] Owner-run remote migration and Worker deployment for demo and production.
+- [x] Live Telegram acceptance after deployment, confirmed by the owner on October 13, 2026.
+
+Before the owner-run release, remote read-only checks found `0004_category_name_keys.sql` pending in both configured databases. An initial D1 `7403`
+was followed by successful migration-list checks, but Worker secret-list checks returned `No access to the specified resource`
+in both environments. The agent performed no remote migration or deployment. The owner subsequently released P1 and confirmed
+live verification in both demo and production on October 13, 2026; P1 has no remaining release or acceptance steps.
+See [Category management and owner-run release checks](CATEGORY_MANAGEMENT.md).
+
+Subsequent P1 refactor (October 12, 2026): expected repository write refusals now return an explicit `RepositoryResult<T>`;
+application code maps them to bot results without catching domain exceptions. Technical failures still throw, and the D1
+adapter translates only recognized category-name uniqueness violations. Existing callers/tests were updated and three
+behavior tests were added for failure results, archive/write races, and technical exceptions. No schema change was needed.
+The earlier 80/80 result predates this refactor. The subsequent full test run passed 83/83 tests on October 12, 2026;
+three focused tests, type check, and dry-run build subsequently passed after removing nested ternaries.
+The Wrangler migration test now disables its banner/npm update check,
+closes child stdin, and bounds each invocation to 30 seconds, preserving all database assertions.
+
+- [x] Full tests after the repository-result refactor: 83/83.
+- [x] Local type check and dry-run build after the repository-result refactor.
+
+Category alphabet simplification (October 12, 2026): new/renamed names accept only Russian letters including `Ё/ё`, English
+letters, ASCII digits, ordinary spaces and `-`, with at least one letter and the existing 80-character limit.
+TDD started with five failing tests; all 12 focused tests then passed, followed by 88/88 full tests, type check and dry-run build.
+NFC, duplicate parser comparison, and unused validation/normalization helpers were removed, reducing production code.
+Case and spacing rules, longest-name matching, comments and existing seeded migration keys remain intact; no new migration is required.
+
+Owner decision (October 12, 2026): removed the frozen category-ID snapshot and legacy `c`/`e` index decoding.
+Such buttons return the existing invalid-button explanation without expense writes; `c1`/`e1` use ordinary category IDs from D1.
+A focused test failed before implementation and three focused tests passed afterward. Full tests passed 89/89,
+along with type check and dry-run build. Existing expense/category rows are unchanged.
 
 ### Task P2: Make the displayed currency configurable
 
@@ -594,7 +646,7 @@ Keep a small acceptance record with versions, check dates, results, and any know
 ## 8. Developer release procedure after the pilot
 
 1. Implement the code change and add numbered migrations if needed. Never edit an already distributed migration.
-2. Preserve existing category IDs and the legacy callback decoder. Use stable IDs for all new category buttons.
+2. Preserve existing category IDs. Use stable IDs for category buttons; pre-P1 index callbacks remain rejected with an invalid-button reply.
 3. Increment the release number embedded in the installer and deployed Worker; keep fixed package paths and the Wrangler
    compatibility date in its configuration template.
 4. Test fresh install and the adjacent upgrade from the previous release. Verify skipped releases and downgrades are rejected.
@@ -681,10 +733,10 @@ Stay on Free unless measurements justify an explicit owner-approved upgrade. Rec
 ## 12. Completion checklist
 
 - [x] P0 is complete before P1/P2/P3: alias configuration and parsing code are removed, name-only entry works, and former synonyms fail.
-- [ ] Category management works inside the bot for both enabled members, including safe archive/restore.
-- [ ] Archived categories cannot be selected for new expenses or category changes; existing expenses remain in history and statistics.
-- [ ] Full-text expense input matches the current category name without aliases; amount-only input still offers category buttons.
-- [ ] Migrated and fresh databases expose the same default categories without losing historical expenses.
+- [x] Category management works inside the bot for both enabled members, including safe archive/restore.
+- [x] Archived categories cannot be selected for new expenses or category changes; existing expenses remain in history and statistics.
+- [x] Full-text expense input matches the current category name without aliases; amount-only input still offers category buttons.
+- [x] Migrated and fresh databases expose the same default categories without losing historical expenses.
 - [ ] The installer selects and later changes the display currency; existing values, sums, and dates remain unchanged.
 - [ ] The selected display currency survives an update.
 - [ ] The installer selects and later changes the finance timezone; existing stored expense dates and UTC timestamps remain unchanged.

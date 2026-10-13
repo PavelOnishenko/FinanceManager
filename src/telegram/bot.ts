@@ -1,5 +1,6 @@
 import { Bot, InlineKeyboard, Keyboard, type Context } from "grammy";
-import { categories } from "../config/categories";
+import type { CategoryOption } from "../config/categories";
+import { handleCategoryAction, handleCategoryReply, showCategoryList } from "./categoryManagement";
 import {
   ApplicationResultKind as Result, checkAccess, createExpenseAfterCategorySelection, deleteExpense, editExpense, getExpenseDetails,
   getExpenseHistory, getPreviousMonthStatistics, getStatisticsForRange, processExpenseMessage, type AccessDenied, type InvalidInput
@@ -10,7 +11,7 @@ import type { D1FinanceRepository, Expense } from "../storage/D1FinanceRepositor
 import { formatCallbackData, parseCallbackData } from "./callbackData";
 import { parseEditReply } from "./parseEditReply";
 
-const menu = new Keyboard().text("История").text("Статистика").text("Помощь").resized().persistent();
+const menu = new Keyboard().text("История").text("Статистика").text("Категории").text("Помощь").resized().persistent();
 const help = "Отправьте расход: 2490 продукты Lidl или просто 2490 и выберите категорию. Дата редактирования: ДД.ММ.ГГГГ.";
 const invalidRangeText = "Конец периода не может быть раньше начала";
 const statisticsStartText = `Статистика доступна с ${firstStatisticsYear} года.`;
@@ -43,6 +44,10 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository)
   bot.on("message:text", async context => {
     if (!await allowMessage(context, repository)) return;
     const text = context.message.text;
+    if (text === "Категории") {
+      await showCategoryList(context, repository);
+      return;
+    }
     if (text === "Помощь") return void await context.reply(help, { reply_markup: menu });
     if (text === "История") {
       const result = await getExpenseHistory(repository, String(context.from.id));
@@ -63,6 +68,9 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository)
 
     const target = context.message.reply_to_message;
     if (target) {
+      if (target.from?.id === context.me.id && "text" in target && typeof target.text === "string"
+          && await handleCategoryReply(context, repository, target.text, text, menu))
+        return;
       const edit = target.from?.id === context.me.id && "text" in target && typeof target.text === "string" ? parseEditPrompt(target.text) : undefined;
       if (!edit) return void await context.reply("Ответьте на запрос редактирования, отправленный этим ботом.", { reply_markup: menu });
       const parsed = parseEditReply(edit.field, text.trim());
@@ -115,6 +123,10 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository)
         showAlert = true;
         return;
       }
+      if (action.kind === "manage-category") {
+        await handleCategoryAction(context, repository, action);
+        return;
+      }
       if (action.kind === "calendar-noop") return;
       if (action.kind === "statistics-month") {
         const range = getCalendarMonthRange(action.month)!;
@@ -157,7 +169,7 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository)
         if (result.kind !== Result.ExpenseDetails)
           return void (acknowledgement = callbackFailure(result));
         await context.editMessageText(action.kind === "category-list" ? `Выберите категорию для расхода #${action.expenseId}:` : describe(result.expense), {
-          reply_markup: action.kind === "category-list" ? categoryButtons(action.expenseId) : detailButtons(action.expenseId)
+          reply_markup: action.kind === "category-list" ? categoryButtons(action.expenseId, await repository.getCategories()) : detailButtons(action.expenseId)
         });
       } else if (action.kind === "edit-prompt") {
         const result = await getExpenseDetails(repository, userId, action.expenseId);
@@ -294,9 +306,9 @@ function detailButtons(expenseId: number): InlineKeyboard {
     .text("Удалить", formatCallbackData({ kind: "delete-request", expenseId }));
 }
 
-function categoryButtons(expenseId: number): InlineKeyboard {
+function categoryButtons(expenseId: number, activeCategories: readonly CategoryOption[]): InlineKeyboard {
   const keyboard = new InlineKeyboard();
-  for (const category of categories)
+  for (const category of activeCategories)
     keyboard.text(category.name, formatCallbackData({ kind: "edit-category", expenseId, categoryId: category.id })).row();
   return keyboard.text("Назад", formatCallbackData({ kind: "edit-actions", expenseId }));
 }

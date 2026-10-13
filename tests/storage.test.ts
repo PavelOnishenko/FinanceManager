@@ -1,3 +1,4 @@
+import { expectRepositorySuccess } from "./repositoryAssertions";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createMigratedLocalD1 } from "../scripts/createLocalD1";
@@ -44,8 +45,8 @@ test("returns the existing expense for a duplicate source action key", async () 
     await seedMember(context.DB, "101", "Анна");
     const sourceActionKey = "message:100";
     const originalAmountRsd = 1200;
-    const first = await context.repository.createExpense(expenseInput({ sourceActionKey, amountRsd: originalAmountRsd }));
-    const duplicate = await context.repository.createExpense(expenseInput({ sourceActionKey, amountRsd: 9999, categoryId: "transport" }));
+    const first = expectRepositorySuccess(await context.repository.createExpense(expenseInput({ sourceActionKey, amountRsd: originalAmountRsd })));
+    const duplicate = expectRepositorySuccess(await context.repository.createExpense(expenseInput({ sourceActionKey, amountRsd: 9999, categoryId: "transport" })));
     assert.equal(first.created, true);
     assert.equal(duplicate.created, false);
     assert.equal(duplicate.expense.id, first.expense.id);
@@ -61,7 +62,8 @@ test("lists the latest ten expenses with author and category", async () => {
   try {
     await seedMember(context.DB, "101", "Анна");
     for (let index = 1; index <= 11; index++)
-      await context.repository.createExpense(expenseInput({ sourceActionKey: `message:${index}`, amountRsd: index, categoryId: "groceries", createdBy: "101" }));
+      expectRepositorySuccess(await context.repository.createExpense(expenseInput({
+        sourceActionKey: `message:${index}`, amountRsd: index, categoryId: "groceries", createdBy: "101" })));
     const history = await context.repository.getRecentExpenses();
     assert.equal(history.length, 10);
     assert.deepEqual(history.map(expense => expense.amountRsd), [11, 10, 9, 8, 7, 6, 5, 4, 3, 2]);
@@ -76,11 +78,11 @@ test("updates editable expense fields", async () => {
   const context = await createTestRepository();
   try {
     await seedMember(context.DB, "101", "Анна");
-    const created = (await context.repository.createExpense(expenseInput({
+    const created = (expectRepositorySuccess(await context.repository.createExpense(expenseInput({
       amountRsd: 1200, categoryId: "groceries", spentOn: "2026-09-15", comment: "До редактирования"
-    }))).expense;
+    })))).expense;
     await context.repository.updateExpenseAmount(created.id, 2400);
-    await context.repository.updateExpenseCategory(created.id, "transport");
+    expectRepositorySuccess(await context.repository.updateExpenseCategory(created.id, "transport"));
     await context.repository.updateExpenseDate(created.id, "2026-09-16");
     const edited = await context.repository.updateExpenseComment(created.id, "Такси");
     assert(edited !== null);
@@ -99,11 +101,11 @@ test("preserves ownership and source action key while editing", async () => {
     await seedMember(context.DB, "101", "Анна");
     const sourceActionKey = "message:100";
     const createdBy = "101";
-    const created = (await context.repository.createExpense(expenseInput({
+    const created = (expectRepositorySuccess(await context.repository.createExpense(expenseInput({
       sourceActionKey, createdBy, amountRsd: 1200, categoryId: "groceries", spentOn: "2026-09-15", comment: "До редактирования"
-    }))).expense;
+    })))).expense;
     await context.repository.updateExpenseAmount(created.id, 2400);
-    await context.repository.updateExpenseCategory(created.id, "transport");
+    expectRepositorySuccess(await context.repository.updateExpenseCategory(created.id, "transport"));
     await context.repository.updateExpenseDate(created.id, "2026-09-16");
     const edited = await context.repository.updateExpenseComment(created.id, "Такси");
     assert(edited !== null);
@@ -118,7 +120,7 @@ test("deletes an expense and reports that it no longer exists", async () => {
   const context = await createTestRepository();
   try {
     await seedMember(context.DB, "101", "Анна");
-    const created = (await context.repository.createExpense(expenseInput())).expense;
+    const created = (expectRepositorySuccess(await context.repository.createExpense(expenseInput()))).expense;
     assert.equal(await context.repository.deleteExpense(created.id), true);
     assert.equal(await context.repository.deleteExpense(created.id), false);
     assert.equal(await context.repository.getExpenseById(created.id), null);
@@ -139,7 +141,7 @@ test("groups statistics by category across inclusive date boundaries", async () 
       ["after", 9999, "other", "2026-10-01"]
     ];
     for (const [sourceActionKey, amountRsd, categoryId, spentOn] of rows)
-      await context.repository.createExpense(expenseInput({ sourceActionKey, amountRsd, categoryId, spentOn }));
+      expectRepositorySuccess(await context.repository.createExpense(expenseInput({ sourceActionKey, amountRsd, categoryId, spentOn })));
     await context.DB.prepare("UPDATE categories SET active = 0 WHERE id = ?").bind("groceries").execute();
     assert.deepEqual(await context.repository.getStatistics("2026-09-01", "2026-09-30"), {
       totalRsd: 2200,

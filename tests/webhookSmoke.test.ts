@@ -101,7 +101,7 @@ test("local webhook smoke covers authentication, expenses, editing, deletion and
     await accepted(callback(410, "p:1:2"));
     await accepted(message(411, "Покупка", String((await lastCall("sendMessage"))?.payload.text)));
     assert.equal((await rows())[0]?.comment, "Покупка");
-    await accepted(callback(412, "e:1:8"));
+    await accepted(callback(412, "e1:1:health"));
     assert.equal((await rows())[0]?.category_id, "health");
 
     await accepted(callback(413, "p:2:1"));
