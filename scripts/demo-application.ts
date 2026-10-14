@@ -17,7 +17,6 @@ try {
   const expenseTime = new Date("2026-09-18T10:00:00.000Z");
   const reportTime = new Date("2026-10-05T10:00:00.000Z");
   await localD1.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(telegramUserId, "Тестовый участник").execute();
-  await localD1.DB.prepare("INSERT INTO instance_settings VALUES (1, ?, ?)").bind("RSD", "Europe/Belgrade").execute();
   const settings = await readInstanceSettings(localD1.DB);
   const repository = new D1FinanceRepository(localD1.DB);
   const direct = await processExpenseMessage(repository, {

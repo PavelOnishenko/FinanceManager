@@ -56,5 +56,36 @@ test("Wrangler settings migration upgrades once without changing expenses or mem
   assert.deepEqual(migrations.results.map((row: { name: string }) => row.name), [
     "0001_initial.sql", "0002_add_expense_categories.sql", "0003_add_communication_category.sql", "0004_category_name_keys.sql", "0005_instance_settings.sql"
   ]);
-  assert.deepEqual(settings.results, []);
+  assert.deepEqual(settings.results, [{ id: 1, display_currency: "RSD", finance_time_zone: "Europe/Belgrade" }]);
+});
+
+test("reapplying migrations preserves the customer's chosen currency and timezone", async context => {
+  const directory = await mkdtemp(path.join(tmpdir(), "finance-settings-preserve-"));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const displayCurrency = "EUR";
+  const financeTimeZone = "America/New_York";
+  await writeFile(path.join(directory, "wrangler.json"), JSON.stringify({
+    name: "settings-preserve", compatibility_date: "2026-09-16",
+    d1_databases: [{ binding: "DB", database_name: "settings-preserve", database_id: "00000000-0000-0000-0000-000000000001" }]
+  }));
+  await cp(new URL("../migrations/", import.meta.url), path.join(directory, "migrations"), { recursive: true });
+  const runWrangler = async (...args: string[]) => {
+    const execution = promisify(execFile)(process.execPath, [path.resolve("node_modules/wrangler/bin/wrangler.js"), ...args], {
+      cwd: directory, timeout: 30_000,
+      env: {
+        ...process.env, CI: "true", WRANGLER_HIDE_BANNER: "true", WRANGLER_SEND_METRICS: "false", WRANGLER_LOG_PATH: path.join(directory, "logs")
+      }
+    });
+    execution.child.stdin?.end();
+    return (await execution).stdout;
+  };
+  await runWrangler("d1", "migrations", "apply", "settings-preserve", "--local");
+  assert.deepEqual(JSON.parse(await runWrangler("d1", "execute", "settings-preserve", "--local", "--json", "--command",
+    "SELECT * FROM instance_settings;"))[0].results, [{ id: 1, display_currency: "RSD", finance_time_zone: "Europe/Belgrade" }]);
+  await writeFile(path.join(directory, "settings.sql"), `
+    UPDATE instance_settings SET display_currency = '${displayCurrency}', finance_time_zone = '${financeTimeZone}' WHERE id = 1;`);
+  await runWrangler("d1", "execute", "settings-preserve", "--local", "--file", "settings.sql");
+  assert.match(await runWrangler("d1", "migrations", "apply", "settings-preserve", "--local"), /No migrations to apply/);
+  assert.deepEqual(JSON.parse(await runWrangler("d1", "execute", "settings-preserve", "--local", "--json", "--command",
+    "SELECT * FROM instance_settings;"))[0].results, [{ id: 1, display_currency: displayCurrency, finance_time_zone: financeTimeZone }]);
 });

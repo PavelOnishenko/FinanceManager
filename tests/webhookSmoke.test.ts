@@ -39,9 +39,6 @@ test("local webhook smoke covers authentication, expenses, editing, deletion and
     for (const statement of migration.split(";").map(part => part.trim()).filter(Boolean))
       await DB.prepare(statement).execute();
 
-    const displayCurrency = "RSD";
-    const financeTimeZone = "Europe/Belgrade";
-    await DB.prepare("INSERT INTO instance_settings VALUES (1, ?, ?)").bind(displayCurrency, financeTimeZone).execute();
     const worker = await miniflare.getWorker("finance-smoke");
     const mock = await miniflare.getWorker("telegram-mock");
     const calls = async () => await (await mock.fetch("http://mock.local/calls")).json() as ApiCall[];

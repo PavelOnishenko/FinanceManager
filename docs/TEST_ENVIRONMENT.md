@@ -43,11 +43,12 @@ npx.cmd wrangler d1 execute family-finance-bot-demo --env demo --remote --comman
 
 Confirm that no migrations remain pending and the counts are `19`, `0`, `0`. Apply future migrations to **both** databases, always naming the intended database explicitly.
 
-After migration `0005_instance_settings.sql`, explicitly initialize the demo settings row before deploying:
-use `display_currency = 'RSD'` and `finance_time_zone = 'Europe/Belgrade'` for this existing environment.
-Read the row back and preserve it if already configured. The migration intentionally creates an empty table;
-without a valid settings row, health and Telegram operations that need currency or timezone return HTTP 503.
-See [Instance settings](INSTANCE_SETTINGS.md) for the SQL and the initialization/change contract.
+Migration `0005_instance_settings.sql` inserts the demo's existing settings:
+`display_currency = 'RSD'` and `finance_time_zone = 'Europe/Belgrade'`.
+Read the row back before deploying and preserve any already chosen values.
+No separate initialization SQL is needed when applying this revision for the first time.
+If the earlier unseeded revision was already applied, see [Instance settings](INSTANCE_SETTINGS.md)
+for the explicit repair procedure. Missing or invalid settings still make health and dependent operations return HTTP 503.
 
 ## 3. Deploy the demo Worker and set its secrets
 

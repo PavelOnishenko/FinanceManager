@@ -293,7 +293,7 @@ test("a timezone change dates future expenses without changing historical rows",
   const database = await createApplicationTestContext();
   context.after(() => database.dispose());
   await seedMember(database.DB, memberId, "Анна", 1);
-  await database.DB.prepare("INSERT INTO instance_settings VALUES (1, ?, ?)").bind(displayCurrency, initialZone).execute();
+  await database.DB.prepare("UPDATE instance_settings SET display_currency = ?, finance_time_zone = ? WHERE id = 1").bind(displayCurrency, initialZone).execute();
   const initial = await processExpenseMessage(database.repository, {
     telegramUserId: memberId, sourceUpdateId: 9800, text: `${amountRsd} продукты`, currentTime
   }, await readInstanceSettings(database.DB));

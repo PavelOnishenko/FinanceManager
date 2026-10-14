@@ -3,10 +3,10 @@ import test from "node:test";
 import { createMigratedLocalD1 } from "../scripts/createLocalD1";
 import { createInstanceSettingsLoader, readInstanceSettings, validateInstanceSettings } from "../src/config/instanceSettings";
 
-test("settings migration leaves configuration explicit", async context => {
+test("settings migration seeds the existing currency and timezone", async context => {
   const database = await createMigratedLocalD1("settings-empty");
   context.after(() => database.dispose());
-  await assert.rejects(readInstanceSettings(database.DB), /instance_settings.*exactly one row/);
+  assert.deepEqual(await readInstanceSettings(database.DB), { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
 });
 
 test("reads a supported currency and timezone from D1", async context => {
@@ -14,7 +14,7 @@ test("reads a supported currency and timezone from D1", async context => {
   const financeTimeZone = "America/New_York";
   const database = await createMigratedLocalD1("settings-configured");
   context.after(() => database.dispose());
-  await database.DB.prepare("INSERT INTO instance_settings (id, display_currency, finance_time_zone) VALUES (1, ?, ?)")
+  await database.DB.prepare("UPDATE instance_settings SET display_currency = ?, finance_time_zone = ? WHERE id = 1")
     .bind(displayCurrency, financeTimeZone).execute();
   assert.deepEqual(await readInstanceSettings(database.DB), { displayCurrency, financeTimeZone });
 });
@@ -38,7 +38,6 @@ test("settings table rejects a second singleton row", async context => {
   const financeTimeZone = "UTC";
   const database = await createMigratedLocalD1("settings-singleton");
   context.after(() => database.dispose());
-  await database.DB.prepare("INSERT INTO instance_settings VALUES (1, ?, ?)").bind(displayCurrency, financeTimeZone).execute();
   await assert.rejects(database.DB.prepare("INSERT INTO instance_settings VALUES (2, ?, ?)").bind(displayCurrency, financeTimeZone).execute());
 });
 
@@ -67,7 +66,7 @@ test("settings loader waits until first use to read the database", async context
   const database = await createMigratedLocalD1("settings-lazy");
   context.after(() => database.dispose());
   const loadSettings = createInstanceSettingsLoader(database.DB);
-  await database.DB.prepare("INSERT INTO instance_settings VALUES (1, ?, ?)").bind(displayCurrency, financeTimeZone).execute();
+  await database.DB.prepare("UPDATE instance_settings SET display_currency = ?, finance_time_zone = ? WHERE id = 1").bind(displayCurrency, financeTimeZone).execute();
   assert.deepEqual(await loadSettings(), { displayCurrency, financeTimeZone });
 });
 
@@ -77,7 +76,7 @@ test("one settings loader reads once and a new loader sees a committed change", 
   const financeTimeZone = "UTC";
   const database = await createMigratedLocalD1("settings-snapshot");
   context.after(() => database.dispose());
-  await database.DB.prepare("INSERT INTO instance_settings VALUES (1, ?, ?)").bind(initialCurrency, financeTimeZone).execute();
+  await database.DB.prepare("UPDATE instance_settings SET display_currency = ?, finance_time_zone = ? WHERE id = 1").bind(initialCurrency, financeTimeZone).execute();
   const loadSettings = createInstanceSettingsLoader(database.DB);
   assert.deepEqual(await loadSettings(), { displayCurrency: initialCurrency, financeTimeZone });
   await database.DB.prepare("UPDATE instance_settings SET display_currency = ? WHERE id = 1").bind(nextCurrency).execute();
