@@ -1,23 +1,33 @@
 # Instance settings: Worker and installer contract
 
-The Worker requires migration `0005_instance_settings.sql` and one explicitly configured
-row in `instance_settings` for expense operations that need currency or timezone, and for health to succeed. P2 currency support and P3
-finance timezone support share this migration. Earlier migration files are unchanged.
-The migration creates an empty table; it does not select settings for the owner.
+Migration `0005_instance_settings.sql` creates `instance_settings` and inserts one
+row with `id = 1`, `display_currency = 'RSD'`, and
+`finance_time_zone = 'Europe/Belgrade'`. These are initial database values;
+the Worker never substitutes them when settings are missing or invalid.
+P2 currency support and P3 finance timezone support share this migration.
+Migrations `0001`–`0004` are unchanged.
 
 ## Existing production and demo instances
 
-The owner must apply the migration and insert the current settings into **each**
-database before deploying the new Worker. No remote migration, setting change,
-or deployment was performed during implementation.
+The owner applies the migration to each database before deploying the new Worker.
+The migration preserves the existing currency/timezone behavior without a
+separate initialization command. Verify the stored row after applying it:
 
-For the existing instances, the explicitly chosen values are:
+```sql
+SELECT id, display_currency, finance_time_zone FROM instance_settings;
+```
+
+No remote migration, setting change, or deployment was performed during implementation.
+
+### If the earlier unseeded revision of 0005 was already applied
+
+Editing the migration file does not rerun a migration already recorded by Wrangler.
+Read the settings row first. Only if it is missing, the owner can explicitly initialize
+that database with the existing instance's settings:
 
 ```sql
 INSERT INTO instance_settings (id, display_currency, finance_time_zone)
 VALUES (1, 'RSD', 'Europe/Belgrade');
-
-SELECT id, display_currency, finance_time_zone FROM instance_settings;
 ```
 
 If the row already exists, read it and preserve its chosen values. Do not replace it
@@ -41,10 +51,16 @@ are rejected. This code is used as plain display text; no conversion is performe
 Runtime validation remains authoritative if installer and Worker runtimes differ.
 Neither setting has a fallback.
 
-During setup, collect both choices, apply migrations, insert the singleton row
-with `id = 1`, and read it back before deploying/registering the webhook. Use bound
-parameters for values. The primary key and `CHECK (id = 1)` reject extra rows;
-both setting columns are non-null and have no SQL defaults.
+During setup, apply migrations and read the seeded settings row from D1. Show its
+current currency and timezone to the owner and require confirmation or a change
+before the bot starts accepting expenses. Save a changed choice using parameter-bound
+`UPDATE` statements for `id = 1`, then read back the values before deploying/registering
+the webhook. The primary key and `CHECK (id = 1)` reject extra rows; both setting
+columns are non-null and have no SQL `DEFAULT` clauses.
+
+Migration history ensures the seed runs only when 0005 is first applied. Updates,
+retries, and package replacement must preserve customer-selected values; never
+repeat the seed or use `INSERT OR REPLACE` to restore the initial values.
 
 ## Changing settings later
 

@@ -9,10 +9,12 @@ for (const setting of ["missing", "display_currency", "finance_time_zone"]) {
     const userId = 101;
     const fixture = await createWorkerFixture(token, secret, 9001);
     context.after(() => fixture.dispose());
-    if (setting !== "missing") {
+    if (setting === "missing")
+      await fixture.DB.prepare("DELETE FROM instance_settings").execute();
+    else {
       const displayCurrency = setting === "display_currency" ? "INVALID" : "EUR";
       const financeTimeZone = setting === "finance_time_zone" ? "Invalid/Zone" : "UTC";
-      await fixture.DB.prepare("INSERT INTO instance_settings VALUES (1, ?, ?)").bind(displayCurrency, financeTimeZone).execute();
+      await fixture.DB.prepare("UPDATE instance_settings SET display_currency = ?, finance_time_zone = ? WHERE id = 1").bind(displayCurrency, financeTimeZone).execute();
     }
     await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
     const health = await fixture.worker.fetch("http://local/health");
@@ -45,7 +47,7 @@ test("a currency change affects the next request without rewriting existing expe
   const updatedAt = "2026-01-06T08:00:00.000Z";
   const fixture = await createWorkerFixture(token, secret, botId);
   context.after(() => fixture.dispose());
-  await fixture.DB.prepare("INSERT INTO instance_settings VALUES (1, ?, ?)").bind(initialCurrency, initialZone).execute();
+  await fixture.DB.prepare("UPDATE instance_settings SET display_currency = ?, finance_time_zone = ? WHERE id = 1").bind(initialCurrency, initialZone).execute();
   await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
   await fixture.DB.prepare(`INSERT INTO expenses (source_action_key, amount_rsd, category_id, spent_on, created_by, created_at, updated_at)
     VALUES (?, ?, 'groceries', ?, ?, ?, ?)`).bind(sourceActionKey, amountRsd, spentOn, String(userId), createdAt, updatedAt).execute();
@@ -108,6 +110,7 @@ for (const data of ["c1:151:200:groceries", "e1:1:other"]) {
     const userId = 101;
     const fixture = await createWorkerFixture("123:fixture", secret, 9001);
     context.after(() => fixture.dispose());
+    await fixture.DB.prepare("DELETE FROM instance_settings").execute();
     await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
     await fixture.DB.prepare(`INSERT INTO expenses (source_action_key, amount_rsd, category_id, spent_on, created_by, created_at, updated_at)
       VALUES ('expense:150', 350, 'groceries', '2026-02-17', ?, '2026-02-17T08:00:00Z', '2026-02-17T08:00:00Z')`).bind(String(userId)).execute();
