@@ -243,8 +243,8 @@ initializes production/demo settings, and deploys; installer controls remain in 
   Configure `RSD` explicitly for the existing production/demo databases before deploying this Worker version.
 - [x] Replace user-visible hard-coded `RSD` in expense confirmation, history, details, editing prompts/errors,
   category-selection prompts, and statistics with this setting. Keep amount validation and integer arithmetic unchanged.
-- [x] Load the setting from D1 at the start of each request in `src/index.ts` and pass it through the Telegram/application
-  boundaries that render text. Do not cache it without a tested invalidation strategy, use global mutable state,
+- [x] Create a request-local settings loader in `src/index.ts`; read and validate settings only when an operation needs
+  currency or timezone, and pass the values through the Telegram/application boundaries that use them. Do not cache it without a tested invalidation strategy, use global mutable state,
   store the label on every expense, or add exchange-rate logic.
 - [x] Keep the current `amount_rsd` database column and its values unchanged in this release.
   Treat it as a legacy field name; renaming it would require a separate compatibility migration and is unnecessary for a text change.
@@ -262,6 +262,14 @@ and request-level configuration handling before implementation. The full regress
 subsequent focused checks also passed for duplicate/absent settings tables, a timezone change, DST evenings,
 and non-RSD totals/percentages. Type check and Worker dry-run build passed. Both fresh-D1 and local Wrangler
 upgrade tests passed; no remote D1 operations or Worker deployment were performed.
+
+Selective settings loading (October 14, 2026): unknown routes and invalid webhook secrets no longer read settings.
+Telegram loads settings only when an operation uses currency or timezone; health always validates them.
+A lazy loader reuses its promise only within the current request. Configuration errors propagate from both
+message and callback handlers as HTTP 503 before dependent expense writes. Help, category management,
+expense deletion, explicit calendar navigation, date/comment prompts, and empty history work without settings.
+TDD reproduced the previous failures; 165/165 full tests, type check, and dry-run build passed.
+No remote D1 operations or Worker deployment were performed.
 
 Bot-side acceptance before installer work: a test D1 with another display label consistently
 renders it for old and new expenses without changing any stored amount or calculation. Final acceptance includes
@@ -303,9 +311,12 @@ the table but does not silently choose values. The installer inserts the row aft
 the Worker/registering the webhook. For existing production/demo databases, explicitly insert their current `RSD`
 and `Europe/Belgrade` values before deploying the Worker that requires the row. Preserve the old migration files.
 
-Read and validate the one settings row for each Worker request, including `/health`, before handling Telegram updates
-or reporting the Worker as healthy. Missing, duplicate, or invalid settings must make health unhealthy and Telegram
-requests fail without creating expenses; log the setting name and reason without logging secrets. Local and deployment
+Always read and validate the settings row for `/health`. For Telegram, read settings only when the action needs currency
+or timezone, before any dependent expense write. Unknown routes, invalid webhook secrets, access denials, help, category
+management, expense deletion, explicit calendar navigation, and date/comment prompts do not read settings. An empty history
+or a missing expense can also be reported without settings. Use at most one settings read per request, reusing its result
+within that request only. Missing, duplicate, or invalid settings make health unhealthy and dependent Telegram operations
+return HTTP 503 without changing expenses; log the setting name and reason without logging secrets. Local and deployment
 test fixtures must insert both values explicitly. Neither the Worker nor installer may use hard-coded or package defaults.
 Test the migration on fresh and populated D1 databases, reject a second settings row, and verify that a settings update
 changes the next Worker response without changing expense rows or deploying a new Worker.
@@ -754,7 +765,7 @@ Stay on Free unless measurements justify an explicit owner-approved upgrade. Rec
 - [ ] The selected display currency survives an update.
 - [ ] The installer selects and later changes the finance timezone; existing stored expense dates and UTC timestamps remain unchanged.
 - [ ] New expense dates and relative-period boundaries follow the selected zone; that zone survives an update.
-- [ ] Both settings live in one D1 row in existing and new databases; missing/invalid values fail health and block writes.
+- [ ] Both settings live in one D1 row in existing and new databases; missing/invalid values fail health and block settings-dependent expense writes.
 - [ ] Settings changes take effect without Worker deployment.
 - [ ] A clean Windows x64 environment can run the delivered package without developer tools or manual commands.
 - [ ] The owner creates a bot and authorizes Cloudflare; all resource setup happens through the wizard.

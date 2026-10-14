@@ -1,4 +1,4 @@
-import type { InstanceSettings } from "../src/config/instanceSettings";
+import { InstanceConfigurationError, type InstanceSettings } from "../src/config/instanceSettings";
 import { expectRepositorySuccess } from "./repositoryAssertions";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -29,14 +29,14 @@ async function addMember(database: SqlDatabase, userId: number, displayName: str
 }
 
 // todo I would like to have a return type here to understand what we are constructing
-async function createTelegramFixture(userId: number, botId: number, settings: InstanceSettings) {
+async function createTelegramFixture(userId: number, botId: number, settings: InstanceSettings | (() => Promise<InstanceSettings>)) {
   const database = await createMigratedLocalD1(`telegram-scenario-${++telegramFixtureNumber}`);
   const repository = new D1FinanceRepository(database.DB);
   const chat: Chat.PrivateChat = { id: userId, type: "private", first_name: "Test user" };
   const user: User = { id: userId, is_bot: false, first_name: "Test user" };
   const botInfo = createTestBotInfo(botId);
   const calls: TelegramApiCall[] = [];
-  const bot = createFinanceBot("123:fixture", repository, settings);
+  const bot = createFinanceBot("123:fixture", repository, typeof settings === "function" ? settings : async () => settings);
   bot.botInfo = botInfo;
   bot.api.config.use(async (_previous, method, payload) => {
     calls.push({ method, payload });
@@ -516,7 +516,7 @@ test("unexpected failures include the update ID without exposing internal detail
   context.after(() => database.dispose());
   const repository = new D1FinanceRepository(database.DB);
   repository.getEnabledMember = async () => { throw new Error("secret-db-detail"); };
-  const bot = createFinanceBot("123:fixture", repository, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const bot = createFinanceBot("123:fixture", repository, async () => ({ displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" }));
   bot.botInfo = createTestBotInfo(botId);
   const calls: { method: string; payload: Record<string, unknown> }[] = [];
   bot.api.config.use(async (_previous, method, payload) => {
@@ -815,3 +815,77 @@ test("editing an amount with a non-RSD label keeps integer storage and expense i
   assert.equal(updated?.createdAt, expense.createdAt);
   assert.match(String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text), new RegExp(`${nextAmount} ${displayCurrency}`));
 });
+
+for (const scenario of ["start", "help", "categories", "category-add", "category-archive", "empty-history", "expense-category-list", "date-prompt", "comment-prompt",
+  "calendar", "delete-request", "delete-confirm", "access-denied"]) {
+  test(`${scenario} does not load instance settings`, async context => {
+    const userId = 713;
+    let settingsReads = 0;
+    const fixture = await createTelegramFixture(userId, 999, async () => {
+      settingsReads++;
+      throw new InstanceConfigurationError("instance_settings: unavailable");
+    });
+    context.after(() => fixture.database.dispose());
+    await addMember(fixture.database.DB, userId, "Анна", scenario === "access-denied" ? 0 : 1);
+    const expenseId = expectRepositorySuccess(await fixture.repository.createExpense({
+      sourceActionKey: "expense:713", amountRsd: 250, spentOn: "2026-02-17", categoryId: "groceries", createdBy: String(userId)
+    })).expense.id;
+    let expectedText: string;
+    switch (scenario) {
+      case "start":
+        await fixture.bot.handleUpdate(fixture.command(960, "/start"));
+        expectedText = "Добро пожаловать";
+        break;
+      case "help":
+        await fixture.bot.handleUpdate(fixture.message(960, "Помощь"));
+        expectedText = "Отправьте расход";
+        break;
+      case "categories":
+        await fixture.bot.handleUpdate(fixture.message(960, "Категории"));
+        expectedText = "Категории: выберите категорию";
+        break;
+      case "category-add":
+        await fixture.bot.handleUpdate(fixture.message(960, "Школа", fixture.replyTarget("Добавление категории", fixture.botInfo)));
+        expectedText = "Категория сохранена";
+        break;
+      case "category-archive":
+        await fixture.bot.handleUpdate(fixture.callback(960, formatCallbackData({ kind: "manage-category", operation: "confirm", categoryId: "groceries" })));
+        expectedText = "Категория архивирована";
+        break;
+      case "empty-history":
+        await fixture.repository.deleteExpense(expenseId);
+        await fixture.bot.handleUpdate(fixture.message(960, "История"));
+        expectedText = "Расходов пока нет";
+        break;
+      case "expense-category-list":
+        await fixture.bot.handleUpdate(fixture.callback(960, `l:${expenseId}`));
+        expectedText = "Выберите категорию для расхода";
+        break;
+      case "date-prompt":
+        await fixture.bot.handleUpdate(fixture.callback(960, `p:${expenseId}:1`));
+        expectedText = "Новая дата";
+        break;
+      case "comment-prompt":
+        await fixture.bot.handleUpdate(fixture.callback(960, `p:${expenseId}:2`));
+        expectedText = "Новый комментарий";
+        break;
+      case "calendar":
+        await fixture.bot.handleUpdate(fixture.callback(960, "k:202602:0"));
+        expectedText = "Выберите начало периода";
+        break;
+      case "delete-request":
+        await fixture.bot.handleUpdate(fixture.callback(960, `r:${expenseId}`));
+        expectedText = "Удалить расход";
+        break;
+      case "delete-confirm":
+        await fixture.bot.handleUpdate(fixture.callback(960, `x:${expenseId}`));
+        expectedText = "удалён";
+        break;
+      default:
+        await fixture.bot.handleUpdate(fixture.message(960, "250 продукты"));
+        expectedText = "Нет доступа";
+    }
+    assert.equal(settingsReads, 0);
+    assert(fixture.calls.some(call => String(call.payload.text).includes(expectedText)));
+  });
+}
