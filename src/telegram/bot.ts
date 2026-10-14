@@ -1,4 +1,4 @@
-import type { InstanceSettings } from "../config/instanceSettings";
+import { InstanceConfigurationError, type InstanceSettingsLoader } from "../config/instanceSettings";
 import { Bot, InlineKeyboard, Keyboard, type Context } from "grammy";
 import type { CategoryOption } from "../config/categories";
 import { handleCategoryAction, handleCategoryReply, showCategoryList } from "./categoryManagement";
@@ -19,12 +19,14 @@ const statisticsStartText = `Статистика доступна с ${firstSta
 const oldStatisticsYearText = `${statisticsStartText} Откройте её заново.`;
 const percentageFormatter = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
-export function createFinanceBot(token: string, repository: D1FinanceRepository, settings: InstanceSettings) {
+export function createFinanceBot(token: string, repository: D1FinanceRepository, loadSettings: InstanceSettingsLoader) {
   const bot = new Bot(token);
   bot.use(async (context, next) => {
     try {
       await next();
     } catch (error) {
+      if (error instanceof InstanceConfigurationError)
+        throw error;
       console.error(`Telegram update ${context.update.update_id} failed`, error);
       try {
         if (context.chat) await context.reply(failureText(context.update.update_id));
@@ -53,13 +55,17 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
     if (text === "История") {
       const result = await getExpenseHistory(repository, String(context.from.id));
       if (result.kind === Result.AccessDenied) return void await context.reply(accessDeniedText(result.telegramUserId));
+      if (!result.expenses.length)
+        return void await context.reply("Расходов пока нет.");
+      const settings = await loadSettings();
       const keyboard = new InlineKeyboard(result.expenses.map(expense => [{
         text: `#${expense.id} · ${expense.amountRsd} ${settings.displayCurrency} · ${expense.categoryName} · ${formatExpenseDate(expense.spentOn)}`,
         callback_data: formatCallbackData({ kind: "details", expenseId: expense.id })
       }]));
-      return void await context.reply(result.expenses.length ? "Последние 10 расходов:" : "Расходов пока нет.", { reply_markup: keyboard });
+      return void await context.reply("Последние 10 расходов:", { reply_markup: keyboard });
     }
     if (text === "Статистика") {
+      const settings = await loadSettings();
       const result = await getPreviousMonthStatistics(repository, String(context.from.id), new Date(), settings.financeTimeZone);
       if (result.kind !== Result.ExpenseStatistics)
         return void await context.reply(result.kind === Result.AccessDenied ? accessDeniedText(result.telegramUserId) : result.message);
@@ -74,6 +80,7 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
         return;
       const edit = target.from?.id === context.me.id && "text" in target && typeof target.text === "string" ? parseEditPrompt(target.text) : undefined;
       if (!edit) return void await context.reply("Ответьте на запрос редактирования, отправленный этим ботом.", { reply_markup: menu });
+      const settings = await loadSettings();
       const parsed = parseEditReply(edit.field, text.trim(), settings.displayCurrency);
       if ("error" in parsed) return void await context.reply(parsed.error, { reply_markup: menu });
       const result = await editExpense(repository, String(context.from.id), edit.expenseId, parsed.edit, settings.displayCurrency);
@@ -86,6 +93,7 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
       return void await context.reply("Расход не найден.", { reply_markup: menu });
     }
 
+    const settings = await loadSettings();
     const result = await processExpenseMessage(repository, {
       telegramUserId: String(context.from.id), sourceUpdateId: context.update.update_id, text, currentTime: new Date()
     }, settings);
@@ -139,7 +147,7 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
         const result = await getStatisticsForRange(repository, userId, range);
         if (result.kind !== Result.ExpenseStatistics) 
           return void (acknowledgement = result.kind === Result.AccessDenied ? accessDeniedText(result.telegramUserId) : result.message);
-        await context.editMessageText(statisticsText(result, settings.displayCurrency), { reply_markup: statisticsButtons(action.month) });
+        await context.editMessageText(statisticsText(result, (await loadSettings()).displayCurrency), { reply_markup: statisticsButtons(action.month) });
       } else if (action.kind === "calendar") {
         await context.editMessageText(calendarText(action.month, action.startDate), { reply_markup: calendarButtons(action.month, action.startDate) });
       } else if (action.kind === "calendar-day") {
@@ -153,11 +161,12 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
           const result = await getStatisticsForRange(repository, userId, { fromDate: action.startDate, toDate: selectedDate });
           if (result.kind !== Result.ExpenseStatistics) 
             return void (acknowledgement = result.kind === Result.AccessDenied ? accessDeniedText(result.telegramUserId) : result.message);
-          await context.editMessageText(statisticsText(result, settings.displayCurrency), {
+          await context.editMessageText(statisticsText(result, (await loadSettings()).displayCurrency), {
             reply_markup: new InlineKeyboard().text("Другой период", formatCallbackData({ kind: "calendar", month: action.month }))
           });
         }
       } else if (action.kind === "create") {
+        const settings = await loadSettings();
         const result = await createExpenseAfterCategorySelection(repository, {
           telegramUserId: userId, sourceUpdateId: action.sourceUpdateId, amountRsd: action.amountRsd,
           categoryId: action.categoryId, currentTime: new Date()
@@ -170,20 +179,27 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
       } else if (action.kind === "details") {
         const result = await getExpenseDetails(repository, userId, action.expenseId);
         if (result.kind !== Result.ExpenseDetails) return void (acknowledgement = callbackFailure(result));
-        await context.reply(describe(result.expense, settings.displayCurrency), { reply_markup: detailButtons(action.expenseId) });
+        await context.reply(describe(result.expense, (await loadSettings()).displayCurrency), { reply_markup: detailButtons(action.expenseId) });
       } else if (action.kind === "category-list" || action.kind === "edit-actions") {
         const result = await getExpenseDetails(repository, userId, action.expenseId);
         if (result.kind !== Result.ExpenseDetails)
           return void (acknowledgement = callbackFailure(result));
-        await context.editMessageText(
-          action.kind === "category-list" ? `Выберите категорию для расхода #${action.expenseId}:` : describe(result.expense, settings.displayCurrency), {
-            reply_markup: action.kind === "category-list" ? categoryButtons(action.expenseId, await repository.getCategories()) : detailButtons(action.expenseId)
+        if (action.kind === "category-list")
+          await context.editMessageText(`Выберите категорию для расхода #${action.expenseId}:`, {
+            reply_markup: categoryButtons(action.expenseId, await repository.getCategories())
+          });
+        else
+          await context.editMessageText(describe(result.expense, (await loadSettings()).displayCurrency), {
+            reply_markup: detailButtons(action.expenseId)
           });
       } else if (action.kind === "edit-prompt") {
         const result = await getExpenseDetails(repository, userId, action.expenseId);
         if (result.kind !== Result.ExpenseDetails) return void (acknowledgement = callbackFailure(result));
-        await context.reply(createEditPrompt(action, settings.displayCurrency), { reply_markup: { force_reply: true, selective: true } });
+        await context.reply(createEditPrompt(action, action.field === "amount" ? (await loadSettings()).displayCurrency : undefined), {
+          reply_markup: { force_reply: true, selective: true }
+        });
       } else if (action.kind === "edit-category") {
+        const settings = await loadSettings();
         const result = await editExpense(repository, userId, action.expenseId, { field: "category", categoryId: action.categoryId }, settings.displayCurrency);
         if (result.kind === Result.ExpenseUpdated)
           await context.reply(`Обновлено: ${describe(result.expense, settings.displayCurrency)}`);
@@ -200,6 +216,11 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
         if (result.kind === Result.ExpenseDeleted) await context.editMessageText(`Расход #${action.expenseId} удалён.`);
       }
     } catch (error) {
+      if (error instanceof InstanceConfigurationError) {
+        acknowledgement = "Бот не настроен. Обратитесь к владельцу.";
+        showAlert = true;
+        throw error;
+      }
       console.error(`Callback update ${context.update.update_id} failed`, error);
       acknowledgement = failureText(context.update.update_id);
       showAlert = true;

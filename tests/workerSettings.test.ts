@@ -26,7 +26,7 @@ for (const setting of ["missing", "display_currency", "finance_time_zone"]) {
     });
     assert.equal(response.status, 503);
     assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), []);
-    assert.deepEqual(await (await fixture.mock.fetch("http://mock.local/calls")).json(), []);
+    assert.deepEqual((await (await fixture.mock.fetch("http://mock.local/calls")).json() as { method: string }[]).map(call => call.method), ["getMe"]);
   });
 }
 
@@ -67,3 +67,59 @@ test("a currency change affects the next request without rewriting existing expe
   assert.match(String(await details(124)), new RegExp(`${amountRsd} ${nextCurrency}`));
   assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), before);
 });
+
+for (const route of ["/unknown", "/telegram"]) {
+  test(`${route} rejects an unrelated or unauthorized request without settings`, async context => {
+    const secret = "selective-secret";
+    const fixture = await createWorkerFixture("123:fixture", secret, 9001);
+    context.after(() => fixture.dispose());
+    await fixture.DB.prepare("DROP TABLE instance_settings").execute();
+    const response = await fixture.worker.fetch(`http://local${route}`, {
+      method: route === "/telegram" ? "POST" : "GET", body: route === "/telegram" ? "{}" : undefined
+    });
+    assert.equal(response.status, route === "/telegram" ? 401 : 404);
+    assert.deepEqual(await (await fixture.mock.fetch("http://mock.local/calls")).json(), []);
+  });
+}
+
+for (const text of ["Помощь", "Категории"]) {
+  test(`${text} works when the settings table is absent`, async context => {
+    const secret = "selective-secret";
+    const userId = 101;
+    const fixture = await createWorkerFixture("123:fixture", secret, 9001);
+    context.after(() => fixture.dispose());
+    await fixture.DB.prepare("DROP TABLE instance_settings").execute();
+    await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
+    const response = await fixture.worker.fetch("http://local/telegram", {
+      method: "POST", headers: { "X-Telegram-Bot-Api-Secret-Token": secret }, body: JSON.stringify({
+        update_id: 150, message: { message_id: 150, date: 0, from: { id: userId, is_bot: false, first_name: "Anna" },
+          chat: { id: userId, type: "private" }, text }
+      })
+    });
+    assert.equal(response.status, 200);
+    assert((await (await fixture.mock.fetch("http://mock.local/calls")).json() as { method: string }[])
+      .some(call => call.method === "sendMessage"));
+  });
+}
+
+for (const data of ["c1:151:200:groceries", "e1:1:other"]) {
+  test(`${data} returns a configuration failure before changing expenses`, async context => {
+    const secret = "selective-secret";
+    const userId = 101;
+    const fixture = await createWorkerFixture("123:fixture", secret, 9001);
+    context.after(() => fixture.dispose());
+    await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
+    await fixture.DB.prepare(`INSERT INTO expenses (source_action_key, amount_rsd, category_id, spent_on, created_by, created_at, updated_at)
+      VALUES ('expense:150', 350, 'groceries', '2026-02-17', ?, '2026-02-17T08:00:00Z', '2026-02-17T08:00:00Z')`).bind(String(userId)).execute();
+    const before = await fixture.DB.prepare("SELECT * FROM expenses").many();
+    const response = await fixture.worker.fetch("http://local/telegram", {
+      method: "POST", headers: { "X-Telegram-Bot-Api-Secret-Token": secret }, body: JSON.stringify({ update_id: 151, callback_query: {
+        id: "151", from: { id: userId, is_bot: false, first_name: "Anna" }, chat_instance: "fixture", data,
+        message: { message_id: 20, date: 0, chat: { id: userId, type: "private" } }
+      } })
+    });
+    assert.equal(response.status, 503);
+    assert.match(JSON.stringify(await response.json()), /instance_settings/);
+    assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), before);
+  });
+}

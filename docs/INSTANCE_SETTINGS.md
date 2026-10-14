@@ -1,7 +1,7 @@
 # Instance settings: Worker and installer contract
 
 The Worker requires migration `0005_instance_settings.sql` and one explicitly configured
-row in `instance_settings` before it can serve requests. P2 currency support and P3
+row in `instance_settings` for expense operations that need currency or timezone, and for health to succeed. P2 currency support and P3
 finance timezone support share this migration. Earlier migration files are unchanged.
 The migration creates an empty table; it does not select settings for the owner.
 
@@ -23,8 +23,8 @@ SELECT id, display_currency, finance_time_zone FROM instance_settings;
 If the row already exists, read it and preserve its chosen values. Do not replace it
 as part of a migration, update, retry, or package replacement. After deployment,
 `GET /health` must return HTTP 200. Missing settings, an unreadable settings table,
-or invalid values return HTTP 503 with a configuration reason. Telegram updates
-also return HTTP 503 and are not processed in that state. Configuration errors
+or invalid values return HTTP 503 with a configuration reason. Telegram updates that need currency or timezone
+also return HTTP 503 without changing expenses in that state. Configuration errors
 log only the setting name and validation reason, without values or secrets.
 
 ## Validation and setup
@@ -73,10 +73,18 @@ its outcome is unknown, read D1 again and reconcile the stored value with both
 the old and proposed values. If that read also fails, report that the outcome is
 unknown; do not claim success or failure and do not silently restore an old value.
 
-Settings are read through a primary D1 session at the start of every Worker
-request, including health. There is no settings cache or global mutable state.
-A committed change applies on the next request without redeployment. A request
-uses the settings snapshot loaded at its start.
+Health always reads and validates settings through a primary D1 session. Other
+requests read settings only when their operation needs currency or timezone,
+before any dependent expense write. Unknown routes and invalid webhook secrets
+are rejected without reading settings. Access denials, help, category management,
+expense deletion, explicit calendar navigation, date/comment prompts, empty
+history, and missing-expense replies also do not need settings. Editing an expense
+still reads settings before writing because its confirmation displays money.
+
+Each request has its own lazy loader. Its first call reads and validates the row;
+further calls reuse the same promise and settings snapshot. No value is cached
+across requests, and no global mutable state is used. A committed change applies
+to the next request that needs settings, without redeployment.
 
 ## Compatibility and remaining installer work
 

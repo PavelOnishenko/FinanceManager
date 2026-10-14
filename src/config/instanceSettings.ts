@@ -29,3 +29,10 @@ export async function readInstanceSettings(database: SqlDatabase): Promise<Insta
     throw new InstanceConfigurationError("instance_settings: expected exactly one row");
   return validateInstanceSettings(rows[0]!);
 }
+
+export type InstanceSettingsLoader = () => Promise<InstanceSettings>;
+
+export function createInstanceSettingsLoader(database: SqlDatabase): InstanceSettingsLoader {
+  let settings: Promise<InstanceSettings> | undefined;
+  return () => settings ??= readInstanceSettings(database);
+}

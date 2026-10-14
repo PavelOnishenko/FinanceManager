@@ -46,7 +46,7 @@ Confirm that no migrations remain pending and the counts are `19`, `0`, `0`. App
 After migration `0005_instance_settings.sql`, explicitly initialize the demo settings row before deploying:
 use `display_currency = 'RSD'` and `finance_time_zone = 'Europe/Belgrade'` for this existing environment.
 Read the row back and preserve it if already configured. The migration intentionally creates an empty table;
-without a valid settings row, health and Telegram requests return HTTP 503.
+without a valid settings row, health and Telegram operations that need currency or timezone return HTTP 503.
 See [Instance settings](INSTANCE_SETTINGS.md) for the SQL and the initialization/change contract.
 
 ## 3. Deploy the demo Worker and set its secrets

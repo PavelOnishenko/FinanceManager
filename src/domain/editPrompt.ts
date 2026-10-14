@@ -14,10 +14,12 @@ const promptTitles: Record<TextEditField, string> = {
 const promptPattern = /^Редактирование расхода №([1-9]\d*) · (Новая сумма|Новая дата|Новый комментарий)$/u;
 const fieldsByTitle = new Map(Object.entries(promptTitles).map(([field, title]) => [title, field as TextEditField]));
 
-export function createEditPrompt(target: EditTarget, displayCurrency: string): string {
+export function createEditPrompt(target: EditTarget, displayCurrency?: string): string {
   let instructions: string;
   switch (target.field) {
     case "amount":
+      if (!displayCurrency)
+        throw new Error("Display currency is required for an amount prompt.");
       instructions = `Отправьте целую сумму в ${displayCurrency}.`;
       break;
     case "date":

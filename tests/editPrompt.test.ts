@@ -34,3 +34,8 @@ test("amount prompts use the selected currency", () => {
   assert.equal(createEditPrompt({ expenseId, field: "amount" }, displayCurrency),
     `Редактирование расхода №${expenseId} · Новая сумма\n\nОтправьте целую сумму в ${displayCurrency}.`);
 });
+
+test("amount prompts require an explicit currency", () => {
+  const expenseId = 123;
+  assert.throws(() => createEditPrompt({ expenseId, field: "amount" }), /currency is required/);
+});
