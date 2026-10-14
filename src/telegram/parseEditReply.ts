@@ -1,11 +1,11 @@
 import type { ExpenseEdit } from "../application/financeApplication";
 import type { TextEditField } from "../domain/editPrompt";
 
-export function parseEditReply(field: TextEditField, value: string): { edit: ExpenseEdit } | { error: string } {
+export function parseEditReply(field: TextEditField, value: string, displayCurrency: string): { edit: ExpenseEdit } | { error: string } {
   if (field === "amount") {
     const amountRsd = Number(value);
     if (!/^[1-9]\d*$/.test(value) || !Number.isSafeInteger(amountRsd))
-      return { error: "Сумма должна быть целым положительным числом в RSD." };
+      return { error: `Сумма должна быть целым положительным числом в ${displayCurrency}.` };
     return { edit: { field: "amount", amountRsd } };
   }
 

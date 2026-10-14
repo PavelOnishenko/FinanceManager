@@ -1,3 +1,4 @@
+import type { InstanceSettings } from "../config/instanceSettings";
 import type { CategoryId } from "../config/categories";
 import { parseExpenseInput } from "../domain/parseExpenseInput";
 import { createExpenseActionKey } from "../domain/sourceActionKey";
@@ -60,36 +61,38 @@ export async function checkAccess(repository: D1FinanceRepository, telegramUserI
   return member ? { kind: ApplicationResultKind.AccessAllowed, member } : { kind: ApplicationResultKind.AccessDenied, telegramUserId };
 }
 
-export async function processExpenseMessage(repository: D1FinanceRepository, input: ProcessExpenseMessageInput): Promise<ExpenseMessageResult> {
+export async function processExpenseMessage(repository: D1FinanceRepository, input: ProcessExpenseMessageInput, settings: InstanceSettings)
+    : Promise<ExpenseMessageResult> {
   const access = await checkAccess(repository, input.telegramUserId);
   if (access.kind === ApplicationResultKind.AccessDenied) return access;
 
   const sourceActionKey = getSourceActionKey(input.sourceUpdateId);
   if (!sourceActionKey) return invalidSourceUpdateId();
   const categoryOptions = await repository.getCategories();
-  const parsed = parseExpenseInput(input.text, categoryOptions);
+  const parsed = parseExpenseInput(input.text, categoryOptions, settings.displayCurrency);
   if (parsed.kind === "invalid") return { kind: ApplicationResultKind.InvalidInput, message: parsed.message };
   if (parsed.kind === "amount") 
     return { kind: ApplicationResultKind.CategorySelection, sourceUpdateId: input.sourceUpdateId, amountRsd: parsed.amountRsd, categories: categoryOptions };
 
   return saveExpense(repository, {
-    sourceActionKey, amountRsd: parsed.amountRsd, categoryId: parsed.categoryId, spentOn: getDateInFinanceTimeZone(input.currentTime),
+    sourceActionKey, amountRsd: parsed.amountRsd, categoryId: parsed.categoryId, spentOn: getDateInFinanceTimeZone(input.currentTime, settings.financeTimeZone),
     comment: parsed.comment, createdBy: access.member.telegramUserId
   });
 }
 
-export async function createExpenseAfterCategorySelection(repository: D1FinanceRepository, input: CreateExpenseWithCategoryInput)
+export async function createExpenseAfterCategorySelection(repository: D1FinanceRepository, input: CreateExpenseWithCategoryInput, settings: InstanceSettings)
     : Promise<AccessDenied | InvalidInput | ExpenseSaved> {
   const access = await checkAccess(repository, input.telegramUserId);
   if (access.kind === ApplicationResultKind.AccessDenied) return access;
   const sourceActionKey = getSourceActionKey(input.sourceUpdateId);
   if (!sourceActionKey) return invalidSourceUpdateId();
-  if (!isPositiveRsdAmount(input.amountRsd)) return { kind: ApplicationResultKind.InvalidInput, message: "Сумма должна быть целым положительным числом в RSD." };
+  if (!isPositiveRsdAmount(input.amountRsd))
+    return { kind: ApplicationResultKind.InvalidInput, message: `Сумма должна быть целым положительным числом в ${settings.displayCurrency}.` };
   if (!(await repository.getCategory(input.categoryId))?.active)
     return { kind: ApplicationResultKind.InvalidInput, message: "Категория недоступна. Выберите активную категорию заново." };
 
   return saveExpense(repository, {
-    sourceActionKey, amountRsd: input.amountRsd, categoryId: input.categoryId, spentOn: getDateInFinanceTimeZone(input.currentTime),
+    sourceActionKey, amountRsd: input.amountRsd, categoryId: input.categoryId, spentOn: getDateInFinanceTimeZone(input.currentTime, settings.financeTimeZone),
     createdBy: access.member.telegramUserId
   });
 }
@@ -107,14 +110,16 @@ export async function getExpenseDetails(repository: D1FinanceRepository, telegra
   return expense ? { kind: ApplicationResultKind.ExpenseDetails, expense } : { kind: ApplicationResultKind.ExpenseNotFound, expenseId };
 }
 
-export async function editExpense(repository: D1FinanceRepository, telegramUserId: string, expenseId: number, edit: ExpenseEdit): Promise<ExpenseEditResult> {
+export async function editExpense(repository: D1FinanceRepository, telegramUserId: string, expenseId: number, edit: ExpenseEdit, displayCurrency: string)
+    : Promise<ExpenseEditResult> {
   const access = await checkAccess(repository, telegramUserId);
   if (access.kind === ApplicationResultKind.AccessDenied) return access;
   if (!Number.isSafeInteger(expenseId) || expenseId <= 0) return invalidExpenseId();
 
   let expense: Expense | null;
   if (edit.field === "amount") {
-    if (!isPositiveRsdAmount(edit.amountRsd)) return { kind: ApplicationResultKind.InvalidInput, message: "Сумма должна быть целым положительным числом в RSD." };
+    if (!isPositiveRsdAmount(edit.amountRsd))
+      return { kind: ApplicationResultKind.InvalidInput, message: `Сумма должна быть целым положительным числом в ${displayCurrency}.` };
     expense = await repository.updateExpenseAmount(expenseId, edit.amountRsd);
   } else if (edit.field === "category") {
     if (!(await repository.getCategory(edit.categoryId))?.active)
@@ -141,8 +146,8 @@ export async function deleteExpense(repository: D1FinanceRepository, telegramUse
     : { kind: ApplicationResultKind.ExpenseNotFound, expenseId };
 }
 
-export async function getPreviousMonthStatistics(repository: D1FinanceRepository, telegramUserId: string, currentTime: Date) {
-  return getStatisticsForRange(repository, telegramUserId, getPreviousCalendarMonthRange(currentTime));
+export async function getPreviousMonthStatistics(repository: D1FinanceRepository, telegramUserId: string, currentTime: Date, financeTimeZone: string) {
+  return getStatisticsForRange(repository, telegramUserId, getPreviousCalendarMonthRange(currentTime, financeTimeZone));
 }
 
 export async function getStatisticsForRange(repository: D1FinanceRepository, telegramUserId: string, range: DateRange) {

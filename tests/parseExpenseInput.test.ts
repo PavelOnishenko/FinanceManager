@@ -3,7 +3,7 @@ import test from "node:test";
 import { categories } from "./defaultCategories";
 import { parseExpenseInput as parseWithCategories } from "../src/domain/parseExpenseInput";
 
-const parseExpenseInput = (input: string) => parseWithCategories(input, categories);
+const parseExpenseInput = (input: string) => parseWithCategories(input, categories, "RSD");
 
 test("parses an integer amount", () => {
   assert.deepEqual(parseExpenseInput("2490"), { kind: "amount", amountRsd: 2490 });
@@ -47,7 +47,7 @@ test("rejects invalid input", () => {
 test("parses hyphenated mixed-case names and preserves unrestricted comment text", () => {
   const activeCategories = [{ id: "u_aaaaaaaaaaaa", name: "Ёлка-School 2026" }];
   const comment = "Café ſport 🎒";
-  assert.deepEqual(parseWithCategories(`2 490 ЁЛКА-school 2026 ${comment}`, activeCategories), {
+  assert.deepEqual(parseWithCategories(`2 490 ЁЛКА-school 2026 ${comment}`, activeCategories, "RSD"), {
     kind: "expense", amountRsd: 2490, categoryId: activeCategories[0]!.id, comment
   });
 });
@@ -55,21 +55,29 @@ test("parses hyphenated mixed-case names and preserves unrestricted comment text
 test("rejects unsupported characters in expense category names", () => {
   const activeCategories = [{ id: "u_aaaaaaaaaaaa", name: "Ёжик" }, { id: "u_bbbbbbbbbbbb", name: "Sport" }];
   for (const name of ["Е\u0308жик", "ſport"])
-    assert.equal(parseWithCategories(`500 ${name}`, activeCategories).kind, "invalid", name);
+    assert.equal(parseWithCategories(`500 ${name}`, activeCategories, "RSD").kind, "invalid", name);
 });
 
 
 test("dynamic names use case-insensitive longest whole-name matching", () => {
   const activeCategories = [{ id: "u_aaaaaaaaaaaa", name: "Дети" }, { id: "u_bbbbbbbbbbbb", name: "Дети школа" },
     { id: "u_cccccccccccc", name: "2026 Отпуск" }, { id: "u_dddddddddddd", name: "Cafe" }];
-  assert.deepEqual(parseWithCategories("500 ДЕТИ   ШКОЛА Книги", activeCategories), {
+  assert.deepEqual(parseWithCategories("500 ДЕТИ   ШКОЛА Книги", activeCategories, "RSD"), {
     kind: "expense", amountRsd: 500, categoryId: activeCategories[1]!.id, comment: "Книги"
   });
-  assert.deepEqual(parseWithCategories("2 490 2026 отпуск", activeCategories), {
+  assert.deepEqual(parseWithCategories("2 490 2026 отпуск", activeCategories, "RSD"), {
     kind: "expense", amountRsd: 2490, categoryId: activeCategories[2]!.id
   });
-  assert.deepEqual(parseWithCategories("500 CAFE Кофе", activeCategories), {
+  assert.deepEqual(parseWithCategories("500 CAFE Кофе", activeCategories, "RSD"), {
     kind: "expense", amountRsd: 500, categoryId: activeCategories[3]!.id, comment: "Кофе"
   });
-  assert.equal(parseWithCategories("500 детиExtra", activeCategories).kind, "invalid");
+  assert.equal(parseWithCategories("500 детиExtra", activeCategories, "RSD").kind, "invalid");
+});
+
+test("invalid full-text amounts report the configured currency", () => {
+  const displayCurrency = "EUR";
+  const activeCategories = [{ id: "groceries", name: "Продукты" }];
+  assert.deepEqual(parseWithCategories("0 продукты", activeCategories, displayCurrency), {
+    kind: "invalid", message: `Сумма должна быть целым положительным числом в ${displayCurrency}.`
+  });
 });

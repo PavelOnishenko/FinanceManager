@@ -1,3 +1,4 @@
+import { InstanceConfigurationError, readInstanceSettings, type InstanceSettings } from "./config/instanceSettings";
 import { D1FinanceRepository } from "./storage/D1FinanceRepository";
 import { CloudflareD1Database, type CloudflareD1Binding } from "./storage/CloudflareD1Database";
 import { createFinanceBot } from "./telegram/bot";
@@ -9,6 +10,15 @@ type Environment = { DB: CloudflareD1Binding; TELEGRAM_BOT_TOKEN: string; TELEGR
 export default {
   async fetch(request: Request, environment: Environment): Promise<Response> {
     const url = new URL(request.url);
+    const database = new CloudflareD1Database(environment.DB);
+    let settings: InstanceSettings;
+    try {
+      settings = await readInstanceSettings(database);
+    } catch (error) {
+      const reason = error instanceof InstanceConfigurationError ? error.message : "instance_settings: configuration unavailable";
+      console.error(`Configuration failure: ${reason}`);
+      return Response.json({ status: "configuration-error", reason }, { status: 503 });
+    }
     if (request.method === "GET" && url.pathname === "/health")
       return Response.json({ status: "ok", service: "family-finance-bot" });
 
@@ -16,7 +26,7 @@ export default {
       if (!hasValidWebhookSecret(request, environment.TELEGRAM_WEBHOOK_SECRET))
         return new Response("Unauthorized", { status: 401 });
       if (!environment.TELEGRAM_BOT_TOKEN) return new Response("Bot token is missing", { status: 503 });
-      const bot = createFinanceBot(environment.TELEGRAM_BOT_TOKEN, new D1FinanceRepository(new CloudflareD1Database(environment.DB)));
+      const bot = createFinanceBot(environment.TELEGRAM_BOT_TOKEN, new D1FinanceRepository(database), settings);
       await bot.init();
       await bot.handleUpdate(await request.json() as Update);
       return new Response("OK");

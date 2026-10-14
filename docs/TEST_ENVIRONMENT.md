@@ -43,6 +43,12 @@ npx.cmd wrangler d1 execute family-finance-bot-demo --env demo --remote --comman
 
 Confirm that no migrations remain pending and the counts are `19`, `0`, `0`. Apply future migrations to **both** databases, always naming the intended database explicitly.
 
+After migration `0005_instance_settings.sql`, explicitly initialize the demo settings row before deploying:
+use `display_currency = 'RSD'` and `finance_time_zone = 'Europe/Belgrade'` for this existing environment.
+Read the row back and preserve it if already configured. The migration intentionally creates an empty table;
+without a valid settings row, health and Telegram requests return HTTP 503.
+See [Instance settings](INSTANCE_SETTINGS.md) for the SQL and the initialization/change contract.
+
 ## 3. Deploy the demo Worker and set its secrets
 
 Create a separate bot with `@BotFather`. Keep its token out of Git and chat messages. Check the code, then deploy only the demo environment:

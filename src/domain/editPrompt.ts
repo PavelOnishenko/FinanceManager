@@ -14,8 +14,18 @@ const promptTitles: Record<TextEditField, string> = {
 const promptPattern = /^Редактирование расхода №([1-9]\d*) · (Новая сумма|Новая дата|Новый комментарий)$/u;
 const fieldsByTitle = new Map(Object.entries(promptTitles).map(([field, title]) => [title, field as TextEditField]));
 
-export function createEditPrompt(target: EditTarget): string {
-  const instructions = target.field === "amount" ? "Отправьте целую сумму в RSD." : target.field === "date" ? "Отправьте дату в формате ДД.ММ.ГГГГ." : "Отправьте новый комментарий или один символ «-», чтобы удалить комментарий.";
+export function createEditPrompt(target: EditTarget, displayCurrency: string): string {
+  let instructions: string;
+  switch (target.field) {
+    case "amount":
+      instructions = `Отправьте целую сумму в ${displayCurrency}.`;
+      break;
+    case "date":
+      instructions = "Отправьте дату в формате ДД.ММ.ГГГГ.";
+      break;
+    case "comment":
+      instructions = "Отправьте новый комментарий или один символ «-», чтобы удалить комментарий.";
+  }
   return `Редактирование расхода №${target.expenseId} · ${promptTitles[target.field]}\n\n${instructions}`;
 }
 

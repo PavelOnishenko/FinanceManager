@@ -43,22 +43,22 @@ test("application uses current names and stable IDs after rename and archive", a
   await database.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(memberId, "Анна").execute();
   assert.equal((await repository.getCategory(categoryId))?.name, initialName);
   expectRepositorySuccess(await repository.renameCategory(categoryId, renamedName));
-  const saved = await createExpenseAfterCategorySelection(repository, { telegramUserId: memberId, sourceUpdateId, amountRsd, categoryId, currentTime });
+  const saved = await createExpenseAfterCategorySelection(repository, { telegramUserId: memberId, sourceUpdateId, amountRsd, categoryId, currentTime }, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
   assert(saved.kind === "expense-saved");
   assert.equal(saved.expense.categoryId, categoryId);
   assert.equal(saved.expense.categoryName, renamedName);
   assert.equal((await processExpenseMessage(repository, {
     telegramUserId: memberId, sourceUpdateId: 9101, text: `200 ${initialName}`, currentTime
-  })).kind, "invalid-input");
+  }, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" })).kind, "invalid-input");
   assert.equal((await processExpenseMessage(repository, {
     telegramUserId: memberId, sourceUpdateId: 9102, text: `200 ${renamedName}`, currentTime
-  })).kind, "expense-saved");
+  }, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" })).kind, "expense-saved");
   expectRepositorySuccess(await repository.setCategoryActive(categoryId, false));
   assert.equal((await createExpenseAfterCategorySelection(repository, {
     telegramUserId: memberId, sourceUpdateId: 9103, amountRsd, categoryId, currentTime
-  })).kind, "invalid-input");
-  assert.equal((await editExpense(repository, memberId, 1, { field: "category", categoryId })).kind, "invalid-input");
-  await editExpense(repository, memberId, 1, { field: "category", categoryId: "other" });
+  }, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" })).kind, "invalid-input");
+  assert.equal((await editExpense(repository, memberId, 1, { field: "category", categoryId }, "RSD")).kind, "invalid-input");
+  await editExpense(repository, memberId, 1, { field: "category", categoryId: "other" }, "RSD");
   assert.equal((await repository.getExpenseById(1))?.categoryId, "other");
 });
 
@@ -84,9 +84,9 @@ test("archiving between application validation and SQL returns a refusal without
   });
   assert.equal((await createExpenseAfterCategorySelection(repository, {
     telegramUserId: memberId, sourceUpdateId, amountRsd, categoryId: requestedCategoryId, currentTime
-  })).kind, "invalid-input");
+  }, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" })).kind, "invalid-input");
   expectRepositorySuccess(await repository.setCategoryActive(requestedCategoryId, true));
-  assert.equal((await editExpense(repository, memberId, saved.expense.id, { field: "category", categoryId: requestedCategoryId })).kind, "invalid-input");
+  assert.equal((await editExpense(repository, memberId, saved.expense.id, { field: "category", categoryId: requestedCategoryId }, "RSD")).kind, "invalid-input");
   assert.equal((await repository.getRecentExpenses()).length, 1);
   assert.equal((await repository.getExpenseById(saved.expense.id))?.categoryId, initialCategoryId);
 });

@@ -1,9 +1,8 @@
-export const financeTimeZone = "Europe/Belgrade";
 export const firstStatisticsYear = 2026;
 
 export type DateRange = { fromDate: string; toDate: string };
 
-export function getDateInFinanceTimeZone(instant: Date): string {
+export function getDateInFinanceTimeZone(instant: Date, financeTimeZone: string): string {
   const parts = new Intl.DateTimeFormat("en", { timeZone: financeTimeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(instant);
   const year = parts.find(part => part.type === "year")?.value;
   const month = parts.find(part => part.type === "month")?.value;
@@ -12,8 +11,8 @@ export function getDateInFinanceTimeZone(instant: Date): string {
   return `${year}-${month}-${day}`;
 }
 
-export function getPreviousCalendarMonthRange(instant: Date): DateRange {
-  const [currentYear, currentMonth] = getDateInFinanceTimeZone(instant).split("-").map(Number);
+export function getPreviousCalendarMonthRange(instant: Date, financeTimeZone: string): DateRange {
+  const [currentYear, currentMonth] = getDateInFinanceTimeZone(instant, financeTimeZone).split("-").map(Number);
   if (!currentYear || !currentMonth) throw new Error(`Could not determine previous month in ${financeTimeZone}.`);
   const year = currentMonth === 1 ? currentYear - 1 : currentYear;
   const month = currentMonth === 1 ? 12 : currentMonth - 1;

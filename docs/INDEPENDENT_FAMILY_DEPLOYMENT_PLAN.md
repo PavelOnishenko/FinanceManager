@@ -1,7 +1,7 @@
 # Independent family deployment: implementation plan
 
 Status: P0 implemented and locally verified on October 11, 2026. P1 fully completed:
-the owner confirmed live verification in demo and production on October 13, 2026. P2/P3 and installer phases are proposed, not implemented.
+the owner confirmed live verification in demo and production on October 13, 2026. P2/P3 bot-side support is implemented and locally tested; remote initialization and installer phases remain pending.
 The subsequent P1 repository-result refactor passed 83/83 tests on October 12, 2026. After removing nested ternaries,
 three focused tests, the type check, and the dry-run build passed. Local tests/check/build are authorized;
 commands accessing remote resources require an explicit owner decision.
@@ -234,24 +234,34 @@ along with type check and dry-run build. Existing expense/category rows are unch
 
 ### Task P2: Make the displayed currency configurable
 
+Bot-side implementation is complete. See [the settings contract](INSTANCE_SETTINGS.md) for supported labels,
+explicit existing-instance initialization, and the installer setup/change protocol. The owner still applies migrations,
+initializes production/demo settings, and deploys; installer controls remain in Tasks 4 and 6.
+
 - [ ] Define a required `display_currency` value in the single D1 settings row and validate a nonempty, supported label.
   Missing or invalid values must cause an explicit configuration failure, never imply `RSD`.
   Configure `RSD` explicitly for the existing production/demo databases before deploying this Worker version.
-- [ ] Replace user-visible hard-coded `RSD` in expense confirmation, history, details, editing prompts/errors,
+- [x] Replace user-visible hard-coded `RSD` in expense confirmation, history, details, editing prompts/errors,
   category-selection prompts, and statistics with this setting. Keep amount validation and integer arithmetic unchanged.
-- [ ] Load the setting from D1 at the start of each request in `src/index.ts` and pass it through the Telegram/application
+- [x] Load the setting from D1 at the start of each request in `src/index.ts` and pass it through the Telegram/application
   boundaries that render text. Do not cache it without a tested invalidation strategy, use global mutable state,
   store the label on every expense, or add exchange-rate logic.
-- [ ] Keep the current `amount_rsd` database column and its values unchanged in this release.
+- [x] Keep the current `amount_rsd` database column and its values unchanged in this release.
   Treat it as a legacy field name; renaming it would require a separate compatibility migration and is unnecessary for a text change.
-- [ ] Define the installer contract: choose a short validated label during setup and change it later by updating the
+- [x] Define the installer contract: choose a short validated label during setup and change it later by updating the
   customer's D1 settings row. Read the current value from D1 before showing a change; do not keep an authoritative
   local or Worker-configuration copy. Explain that old amounts keep the same number and receive the new label.
   If a write times out, read D1 again before reporting whether the old or new label is in effect.
   Implement the actual wizard controls in installer Tasks 4 and 6.
-- [ ] Add tests using a label other than `RSD` and verify all bot money text changes while stored amounts,
+- [x] Add tests using a label other than `RSD` and verify all bot money text changes while stored amounts,
   statistics totals/percentages, editing, source action keys, and expense dates remain numerically identical.
   Verify missing/invalid settings fail visibly and test a later label change with existing expenses.
+
+Local verification (October 13, 2026): TDD reproduced failing currency prompts, timezone boundaries,
+and request-level configuration handling before implementation. The full regression suite passed 138/138 tests;
+subsequent focused checks also passed for duplicate/absent settings tables, a timezone change, DST evenings,
+and non-RSD totals/percentages. Type check and Worker dry-run build passed. Both fresh-D1 and local Wrangler
+upgrade tests passed; no remote D1 operations or Worker deployment were performed.
 
 Bot-side acceptance before installer work: a test D1 with another display label consistently
 renders it for old and new expenses without changing any stored amount or calculation. Final acceptance includes
@@ -259,24 +269,27 @@ choosing and changing the label through the installer during the separate-accoun
 
 ### Task P3: Make the finance timezone configurable
 
+Bot-side support is implemented with P2 because this plan requires them to share a migration and ship together.
+Remote initialization and installer controls remain pending. See [the settings contract](INSTANCE_SETTINGS.md).
+
 - [ ] Define a required `finance_time_zone` value in the same D1 settings row. Accept only a valid IANA timezone identifier
   supported by the Worker runtime; missing, invalid, or unsupported values must fail visibly, never imply `Europe/Belgrade`.
   Configure `Europe/Belgrade` explicitly for the existing production/demo databases before deploying this Worker version.
-- [ ] Replace the hard-coded timezone in `src/application/dateRange.ts` with the validated value read from D1 and passed
+- [x] Replace the hard-coded timezone in `src/application/dateRange.ts` with the validated value read from D1 and passed
   through the Telegram/application calls that need the current local date. Avoid process-global mutable state.
-- [ ] Use the selected timezone when assigning `spent_on` to a newly created expense, including both full-text entry and
+- [x] Use the selected timezone when assigning `spent_on` to a newly created expense, including both full-text entry and
   amount-plus-category selection. Use the time of the actual creation action; do not reinterpret a prior message's timestamp.
-- [ ] Use it for current date/month/year decisions in time-relative actions, especially previous-month statistics and
+- [x] Use it for current date/month/year decisions in time-relative actions, especially previous-month statistics and
   the calendar month initially shown from that action. Preserve the fixed `firstStatisticsYear = 2026` history floor:
   it is a product rule, not a timezone-dependent current year.
-- [ ] Keep explicitly entered dates and existing `expenses.spent_on` values exactly as stored. Do not run a D1 data migration,
+- [x] Keep explicitly entered dates and existing `expenses.spent_on` values exactly as stored. Do not run a D1 data migration,
   backfill, UTC conversion, or recomputation when the selected timezone changes. Do not alter existing UTC creation/update timestamps.
-- [ ] Define the installer contract: choose the timezone at setup, show the current and proposed zones when changing it,
+- [x] Define the installer contract: choose the timezone at setup, show the current and proposed zones when changing it,
   and explain that newly added expenses and relative-period boundaries may change while historical dates stay fixed.
   Update only the D1 settings row; verify the committed value by reading it back. If the write result is unknown, reconcile
   against D1 before reporting success or failure. No Worker redeployment is needed for a settings-only change.
   Implement the actual wizard controls in installer Tasks 4 and 6.
-- [ ] Test different zones at the same instant near day, month, and year boundaries, plus daylight-saving transitions.
+- [x] Test different zones at the same instant near day, month, and year boundaries, plus daylight-saving transitions.
   Verify the new expense date and previous-month range use the selected zone, and changing zones leaves existing expense
   rows, explicit dates, amounts, and UTC timestamps untouched. Verify missing/invalid settings fail visibly.
 
