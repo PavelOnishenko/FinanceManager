@@ -57,7 +57,7 @@ require confirmation with these explanations in Russian:
   для всех старых и новых расходов и отчётов.
 - Часовой пояс влияет на даты новых расходов и границы относительных периодов,
   например предыдущего месяца. Сохранённые даты, суммы и временные метки старых
-  расходов не изменятся. Состав относительного отчёта может измениться.
+  расходов не изменятся. Состав статистики может измениться.
 
 Validate the proposed values and update only the relevant settings columns,
 never expenses. Example parameterized operations:
