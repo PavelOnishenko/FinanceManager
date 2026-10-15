@@ -35,6 +35,43 @@
 - In update tests, explicitly specify every initial value for the fields being changed, and make each initial value different from its expected final value
   so the test proves that the update occurred.
 
+### Test refactoring
+
+- Prioritize readable scenarios, less duplication, and preserved meaningful coverage. Fewer lines and tests are useful outcomes,
+  not quotas. Do not combine unrelated behaviors or hide scenario details merely to make the suite smaller.
+- Before changing affected tests, identify their distinct behaviors and run them to establish a baseline.
+  Distinguish pre-existing failures from regressions introduced by the refactor.
+- When deleting, merging, or moving tests, identify the surviving test or case that covers each distinct behavior.
+  Include this mapping in the change description; explain any behavior intentionally no longer covered.
+  Similar setup, execution paths, or assertions alone do not prove that two tests are redundant.
+- Choose representative inputs by behavioral equivalence classes and boundaries. Preserve relevant success, rejection, failure,
+  and state-transition scenarios. Cover combinations when their interaction changes behavior; avoid enumerating independent combinations.
+- Preserve regression scenarios for known bugs unless a surviving test catches the same defect.
+  Make the reason for unusual inputs clear in the test name or a short comment.
+- Use table-driven cases when setup, action, and assertion structure are the same. Keep inputs and expected outcomes explicit,
+  and identify each failing case clearly. Split cases that require conditional setup or different assertion logic.
+  Reducing test declarations through parameterization does not remove the scenarios being executed.
+- Name each test for its condition and observable outcome. Keep setup, action, and assertions easy to distinguish.
+  Use only the actions needed to establish that scenario; keep multi-step workflows when the transitions themselves are under test.
+- Extract repeated mechanical setup only when it improves readability. Prefer small helpers with explicit arguments;
+  avoid deep fixture hierarchies, boolean mode flags, and helpers that perform hidden scenario actions.
+  Keep behavior-driving values and expected results visible in the test, as required above.
+- Determine expected outcomes independently of the production logic under test. Do not compute expectations with the same parser,
+  formatter, calculation, or normalization function whose correctness the test is intended to establish.
+- Preserve real boundary coverage when moving detailed rule checks to simpler tests. Mock-based tests do not replace checks of SQL
+  constraints, migrations, Worker routing, or integration wiring. Keep each boundary test focused on what that boundary adds.
+- For rejected operations, verify the relevant absence of side effects when that is part of the requirement.
+  For idempotency and retry scenarios, verify the final observable state as well as the relevant response.
+- Keep tests deterministic and independent. Control clocks, randomness, environment variables, and external responses when relevant.
+  Restore mocks and release resources even after failures. Do not introduce arbitrary sleeps or dependencies on test execution order.
+- Keep production behavior unchanged during test refactoring. Avoid unrelated production changes, new dependencies,
+  runner migrations, or infrastructure optimization in the same change.
+- Run affected tests during editing, then the complete suite and relevant project checks before completion.
+  If fixture lifecycle or shared state changes, also verify tests individually and together and check for execution-order dependencies.
+  Do not obtain passing results by skipping scenarios, weakening required assertions, or reducing default test discovery.
+- Summarize removed duplication, preserved scenario coverage, and checks performed. Treat line and branch coverage as supporting evidence,
+  not proof that behavior coverage is unchanged. Document any remaining coverage uncertainty.
+
 ## Code style
 
 - Do not use nested ternary expressions. When conditional expressions become nested, replace them with `if`, `switch`, or another clear control flow.
