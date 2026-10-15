@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createTelegramUpdates } from "./telegramUpdates";
 import { createWorkerFixture } from "./workerFixture";
 
 for (const setting of ["missing", "display_currency", "finance_time_zone"]) {
@@ -20,12 +21,7 @@ for (const setting of ["missing", "display_currency", "finance_time_zone"]) {
     const health = await fixture.worker.fetch("http://local/health");
     assert.equal(health.status, 503);
     assert.match(JSON.stringify(await health.json()), new RegExp(setting === "missing" ? "instance_settings" : setting));
-    const response = await fixture.worker.fetch("http://local/telegram", {
-      method: "POST", headers: { "X-Telegram-Bot-Api-Secret-Token": secret }, body: JSON.stringify({
-        update_id: 120, message: { message_id: 120, date: 0, from: { id: userId, is_bot: false, first_name: "Anna" },
-          chat: { id: userId, type: "private" }, text: "200 продукты" }
-      })
-    });
+    const response = await fixture.webhook(createTelegramUpdates(userId).message(120, "200 продукты"), secret);
     assert.equal(response.status, 503);
     assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), []);
   });
@@ -52,15 +48,9 @@ test("a currency change affects the next request without rewriting existing expe
     VALUES (?, ?, 'groceries', ?, ?, ?, ?)`).bind(sourceActionKey, amountRsd, spentOn, String(userId), createdAt, updatedAt).execute();
   const before = await fixture.DB.prepare("SELECT * FROM expenses").many();
   const details = async (updateId: number) => {
-    const response = await fixture.worker.fetch("http://local/telegram", {
-      method: "POST", headers: { "X-Telegram-Bot-Api-Secret-Token": secret }, body: JSON.stringify({ update_id: updateId, callback_query: {
-        id: String(updateId), from: { id: userId, is_bot: false, first_name: "Anna" }, chat_instance: "fixture", data: "d:1",
-        message: { message_id: 20, date: 0, chat: { id: userId, type: "private" } }
-      } })
-    });
+    const response = await fixture.webhook(createTelegramUpdates(userId).callback(updateId, "d:1"), secret);
     assert.equal(response.status, 200);
-    return (await (await fixture.mock.fetch("http://mock.local/calls")).json() as { method: string; payload: { text?: string } }[])
-      .findLast(call => call.method === "sendMessage")?.payload.text;
+    return (await fixture.lastCall("sendMessage"))?.payload.text;
   };
   assert.match(String(await details(123)), new RegExp(`${amountRsd} ${initialCurrency}`));
   await fixture.DB.prepare("UPDATE instance_settings SET display_currency = ? WHERE id = 1")
@@ -79,7 +69,7 @@ for (const route of ["/unknown", "/telegram"]) {
       method: route === "/telegram" ? "POST" : "GET", body: route === "/telegram" ? "{}" : undefined
     });
     assert.equal(response.status, route === "/telegram" ? 401 : 404);
-    assert.deepEqual(await (await fixture.mock.fetch("http://mock.local/calls")).json(), []);
+    assert.deepEqual(await fixture.calls(), []);
   });
 }
 
@@ -91,15 +81,9 @@ for (const text of ["Помощь", "Категории"]) {
     context.after(() => fixture.dispose());
     await fixture.DB.prepare("DROP TABLE instance_settings").execute();
     await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
-    const response = await fixture.worker.fetch("http://local/telegram", {
-      method: "POST", headers: { "X-Telegram-Bot-Api-Secret-Token": secret }, body: JSON.stringify({
-        update_id: 150, message: { message_id: 150, date: 0, from: { id: userId, is_bot: false, first_name: "Anna" },
-          chat: { id: userId, type: "private" }, text }
-      })
-    });
+    const response = await fixture.webhook(createTelegramUpdates(userId).message(150, text), secret);
     assert.equal(response.status, 200);
-    assert((await (await fixture.mock.fetch("http://mock.local/calls")).json() as { method: string }[])
-      .some(call => call.method === "sendMessage"));
+    assert((await fixture.calls()).some(call => call.method === "sendMessage"));
   });
 }
 
@@ -114,12 +98,7 @@ for (const data of ["c1:151:200:groceries", "e1:1:other"]) {
     await fixture.DB.prepare(`INSERT INTO expenses (source_action_key, amount_rsd, category_id, spent_on, created_by, created_at, updated_at)
       VALUES ('expense:150', 350, 'groceries', '2026-02-17', ?, '2026-02-17T08:00:00Z', '2026-02-17T08:00:00Z')`).bind(String(userId)).execute();
     const before = await fixture.DB.prepare("SELECT * FROM expenses").many();
-    const response = await fixture.worker.fetch("http://local/telegram", {
-      method: "POST", headers: { "X-Telegram-Bot-Api-Secret-Token": secret }, body: JSON.stringify({ update_id: 151, callback_query: {
-        id: "151", from: { id: userId, is_bot: false, first_name: "Anna" }, chat_instance: "fixture", data,
-        message: { message_id: 20, date: 0, chat: { id: userId, type: "private" } }
-      } })
-    });
+    const response = await fixture.webhook(createTelegramUpdates(userId).callback(151, data), secret);
     assert.equal(response.status, 503);
     assert.match(JSON.stringify(await response.json()), /instance_settings/);
     assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), before);
