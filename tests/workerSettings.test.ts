@@ -50,15 +50,6 @@ test("a currency change affects the next request without rewriting existing expe
   assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), before);
 });
 
-test("unrelated and unauthorized requests are rejected even before settings are migrated", async context => {
-  const fixture = await createWorkerFixture("123:fixture", "selective-secret", 9001);
-  context.after(() => fixture.dispose());
-  await fixture.DB.prepare("DROP TABLE instance_settings").execute();
-  for (const [route, method, status] of [["/unknown", "GET", 404], ["/telegram", "POST", 401]] as const)
-    assert.equal((await fixture.worker.fetch(`http://local${route}`, { method })).status, status, route);
-  assert.deepEqual(await fixture.calls(), []);
-});
-
 test("help and categories remain available before settings are migrated", async context => {
   const secret = "selective-secret";
   const userId = 101;

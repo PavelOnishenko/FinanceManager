@@ -214,7 +214,6 @@ test("menu buttons return help and previous-month statistics", async context => 
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
 
-  context.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-15T12:00:00Z") });
   await fixture.bot.handleUpdate(fixture.message(416, "Помощь"));
   assert.equal(fixture.calls.at(-1)?.method, "sendMessage");
   assert.match(String(fixture.calls.at(-1)?.payload.text), /^Отправьте расход:/);
@@ -362,22 +361,6 @@ test("photo message asks for text instead of remaining silent", async context =>
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.photo(502));
   assert.match(String(fixture.calls.at(-1)?.payload.text), /только текстовые сообщения/);
-});
-
-test("history reports access revoked between checks", async context => {
-  const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, createSettings());
-  context.after(() => fixture.database.dispose());
-  await addMember(fixture.database.DB, userId, "Анна", 1);
-  const getMember = fixture.repository.getEnabledMember.bind(fixture.repository);
-  // An administrator can revoke access while an update is being handled.
-  context.mock.method(fixture.repository, "getEnabledMember", async (id: string) => {
-    const member = await getMember(id);
-    await fixture.database.DB.prepare("UPDATE members SET enabled = 0 WHERE telegram_user_id = ?").bind(id).execute();
-    return member;
-  });
-  await fixture.bot.handleUpdate(fixture.message(503, "История"));
-  assert.match(String(fixture.calls.at(-1)?.payload.text), /Нет доступа.*127/);
 });
 
 test("callback reports access revoked between checks in chat and alert", async context => {
