@@ -1,3 +1,4 @@
+import { createSettings } from "./createSettings";
 import { InstanceConfigurationError, type InstanceSettings } from "../src/config/instanceSettings";
 import { expectRepositorySuccess } from "./repositoryAssertions";
 import assert from "node:assert/strict";
@@ -64,7 +65,7 @@ function assertMenuShown(calls: TelegramApiCall[]) {
 
 test("January 2026 has no previous-month button and old buttons explain the limit", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.callback(710, formatCallbackData({ kind: "statistics-month", month: "2026-01" })));
@@ -85,7 +86,7 @@ test("monthly statistics includes boundary dates and lists family categories by 
   const userId = 127;
   const otherUserId = 128;
   const month = "2026-02";
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "RSD" }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await addMember(fixture.database.DB, otherUserId, "Борис", 1);
@@ -114,7 +115,7 @@ test("monthly statistics includes boundary dates and lists family categories by 
 test("calendar placeholder acknowledges a tap without editing the message", async context => {
   const userId = 127;
   const month = "2026-02";
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.callback(701, formatCallbackData({ kind: "calendar", month })));
@@ -133,7 +134,7 @@ test("calendar placeholder acknowledges a tap without editing the message", asyn
 test("calendar rejects an end date before the selected start", async context => {
   const userId = 127;
   const month = "2026-02";
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.callback(701, formatCallbackData({ kind: "calendar", month })));
@@ -149,7 +150,7 @@ test("calendar keeps the start date across months and includes both range bounda
   const userId = 127;
   const otherUserId = 128;
   const startDate = "2026-02-15";
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "RSD" }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await addMember(fixture.database.DB, otherUserId, "Борис", 1);
@@ -186,7 +187,7 @@ test("calendar keeps the start date across months and includes both range bounda
 
 test("denies an unknown user and welcomes an enabled member", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await fixture.bot.handleUpdate(fixture.command(390, "/start"));
   assert.match(String(fixture.calls.at(-1)?.payload.text), /Нет доступа. Ваш Telegram ID: 127/);
@@ -198,7 +199,7 @@ test("denies an unknown user and welcomes an enabled member", async context => {
 
 test("creates an expense directly from a complete Telegram message", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "RSD" }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
 
@@ -211,7 +212,7 @@ test("creates an expense directly from a complete Telegram message", async conte
 test("offers one category per row and saves only once after repeated taps", async context => {
   const userId = 127;
   const sourceUpdateId = 400;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
 
@@ -232,7 +233,7 @@ test("offers one category per row and saves only once after repeated taps", asyn
 
 test("menu buttons return help and previous-month statistics", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "RSD" }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
 
@@ -248,7 +249,7 @@ test("history shows one button per recent expense", async context => {
   const userId = 127;
   const groceriesDate = "2026-09-17";
   const transportDate = "2026-09-18";
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "RSD" }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   expectRepositorySuccess(await fixture.repository.createExpense({
@@ -267,7 +268,7 @@ test("history shows one button per recent expense", async context => {
 
 test("expense details keep categories behind a button and can return from the category list", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
@@ -294,7 +295,7 @@ test("expense details keep categories behind a button and can return from the ca
 
 test("amount edit ignores a prompt not sent by the bot", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
@@ -309,7 +310,7 @@ test("amount edit ignores a prompt not sent by the bot", async context => {
 
 test("amount edit accepts the bot's prompt and restores the menu", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
@@ -324,7 +325,7 @@ test("amount edit accepts the bot's prompt and restores the menu", async context
 
 test("date edit changes the explicitly seeded original date", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
@@ -340,7 +341,7 @@ test("date edit changes the explicitly seeded original date", async context => {
 
 test("comment edit replaces the original comment", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
@@ -355,7 +356,7 @@ test("comment edit replaces the original comment", async context => {
 
 test("category callback replaces the original category", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
@@ -367,7 +368,7 @@ test("category callback replaces the original category", async context => {
 
 test("delete requires a separate confirmation callback", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
@@ -382,7 +383,7 @@ test("delete requires a separate confirmation callback", async context => {
 
 test("smoke: a saved message appears in history and opens its details", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "RSD" }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
@@ -404,7 +405,7 @@ test("webhook secret validation rejects missing and mismatching headers", () => 
 });
 
 test("group command explains that the bot works in private chat", async context => {
-  const fixture = await createTelegramFixture(127, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(127, 999, createSettings());
   context.after(() => fixture.database.dispose());
   const groupChat: Chat.SupergroupChat = { id: -100, type: "supergroup", title: "Семья" };
   await fixture.bot.handleUpdate({ update_id: 500, message: {
@@ -416,7 +417,7 @@ test("group command explains that the bot works in private chat", async context 
 });
 
 test("group callback shows a private-chat alert", async context => {
-  const fixture = await createTelegramFixture(127, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(127, 999, createSettings());
   context.after(() => fixture.database.dispose());
   const groupChat: Chat.SupergroupChat = { id: -100, type: "supergroup", title: "Семья" };
   await fixture.bot.handleUpdate({ update_id: 506, callback_query: {
@@ -429,7 +430,7 @@ test("group callback shows a private-chat alert", async context => {
 });
 
 test("message without a sender explains why access cannot be checked", async context => {
-  const fixture = await createTelegramFixture(127, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(127, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await fixture.bot.handleUpdate({ update_id: 501, message: {
     message_id: 501, date: 0, chat: fixture.chat, text: "2490"
@@ -439,7 +440,7 @@ test("message without a sender explains why access cannot be checked", async con
 
 test("photo message asks for text instead of remaining silent", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate({ update_id: 502, message: {
@@ -451,7 +452,7 @@ test("photo message asks for text instead of remaining silent", async context =>
 
 test("history reports access revoked between checks", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   let accessChecks = 0;
   fixture.repository.getEnabledMember = async () => ++accessChecks === 1 ? { telegramUserId: String(userId), displayName: "Анна" } : null;
@@ -462,7 +463,7 @@ test("history reports access revoked between checks", async context => {
 
 test("statistics reports access revoked between checks", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   let accessChecks = 0;
   fixture.repository.getEnabledMember = async () => ++accessChecks === 1 ? { telegramUserId: String(userId), displayName: "Анна" } : null;
@@ -473,7 +474,7 @@ test("statistics reports access revoked between checks", async context => {
 
 test("expense input reports access revoked between checks", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   let accessChecks = 0;
   fixture.repository.getEnabledMember = async () => ++accessChecks === 1 ? { telegramUserId: String(userId), displayName: "Анна" } : null;
@@ -484,7 +485,7 @@ test("expense input reports access revoked between checks", async context => {
 
 test("callback reports access revoked between checks in chat and alert", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   let accessChecks = 0;
   fixture.repository.getEnabledMember = async () => ++accessChecks === 1 ? { telegramUserId: String(userId), displayName: "Анна" } : null;
@@ -497,7 +498,7 @@ test("callback reports access revoked between checks in chat and alert", async c
 });
 
 test("unsupported callback is acknowledged with an explanation", async context => {
-  const fixture = await createTelegramFixture(127, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(127, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await fixture.bot.handleUpdate({ update_id: 508, callback_query: {
     id: "508", from: fixture.user, chat_instance: "fixture", game_short_name: "unsupported",
@@ -516,7 +517,7 @@ test("unexpected failures include the update ID without exposing internal detail
   context.after(() => database.dispose());
   const repository = new D1FinanceRepository(database.DB);
   repository.getEnabledMember = async () => { throw new Error("secret-db-detail"); };
-  const bot = createFinanceBot("123:fixture", repository, async () => ({ displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" }));
+  const bot = createFinanceBot("123:fixture", repository, async () => createSettings());
   bot.botInfo = createTestBotInfo(botId);
   const calls: { method: string; payload: Record<string, unknown> }[] = [];
   bot.api.config.use(async (_previous, method, payload) => {
@@ -554,7 +555,7 @@ test("category addition uses ForceReply and enables both expense entry paths", a
   const textAmountRsd = 800;
   const buttonAmountRsd = 500;
   const comment = "Учебники";
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.message(800, "Категории"));
@@ -583,7 +584,7 @@ test("another member renames a category through ForceReply and updates historica
   const editorId = 128;
   const initialName = "Дети-School 2026";
   const renamedName = "Образование";
-  const fixture = await createTelegramFixture(editorId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(editorId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, authorId, "Анна", 1);
   await addMember(fixture.database.DB, editorId, "Борис", 1);
@@ -606,7 +607,7 @@ test("category archiving requires confirmation and preserves historical expenses
   const userId = 127;
   const categoryName = "Образование";
   const amountRsd = 800;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   const category = expectRepositorySuccess(await fixture.repository.addCategory(categoryName));
@@ -625,7 +626,7 @@ test("category archiving requires confirmation and preserves historical expenses
 test("archived categories disappear from current expense menus and full-text entry", async context => {
   const userId = 127;
   const categoryName = "Образование";
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   const category = expectRepositorySuccess(await fixture.repository.addCategory(categoryName));
@@ -651,7 +652,7 @@ test("an expense in an archived category can still be edited through ForceReply"
   const userId = 127;
   const initialExpenseDate = "2026-10-01";
   const finalExpenseDate = "2026-10-02";
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   const category = expectRepositorySuccess(await fixture.repository.addCategory("Образование"));
@@ -671,7 +672,7 @@ test("another member restores a category from the archive and enables new expens
   const categoryName = "Образование";
   const originalAmountRsd = 800;
   const newAmountRsd = 500;
-  const fixture = await createTelegramFixture(editorId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(editorId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, authorId, "Анна", 1);
   await addMember(fixture.database.DB, editorId, "Борис", 1);
@@ -697,7 +698,7 @@ test("another member restores a category from the archive and enables new expens
 
 test("category prompts reject invalid names, duplicates and replies to another sender", async context => {
   const userId = 129;
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.callback(850, "m1:add"));
@@ -715,7 +716,7 @@ test("obsolete category buttons explain failure without creating or changing an 
   const userId = 130;
   const amountRsd = 500;
   const categoryId = "groceries";
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "RSD" }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.message(9600, `${amountRsd} продукты`));
@@ -740,7 +741,7 @@ for (const surface of ["history", "details", "edit-actions", "amount-prompt", "s
     const amountRsd = 600;
     const spentOn = "2026-02-17";
     const sourceActionKey = "expense:711";
-    const fixture = await createTelegramFixture(userId, 999, { displayCurrency, financeTimeZone: "America/New_York" });
+    const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency, financeTimeZone: "America/New_York" }));
     context.after(() => fixture.database.dispose());
     await addMember(fixture.database.DB, userId, "Анна", 1);
     const expense = expectRepositorySuccess(await fixture.repository.createExpense({
@@ -800,7 +801,7 @@ test("editing an amount with a non-RSD label keeps integer storage and expense i
   const nextAmount = 750;
   const spentOn = "2026-02-17";
   const sourceActionKey = "expense:712";
-  const fixture = await createTelegramFixture(userId, 999, { displayCurrency, financeTimeZone });
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency, financeTimeZone }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   const expense = expectRepositorySuccess(await fixture.repository.createExpense({

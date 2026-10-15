@@ -1,4 +1,5 @@
-import { readInstanceSettings, type InstanceSettings } from "../src/config/instanceSettings";
+import { createSettings } from "./createSettings";
+import { readInstanceSettings } from "../src/config/instanceSettings";
 import { expectRepositorySuccess } from "./repositoryAssertions";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -13,10 +14,6 @@ import { D1FinanceRepository } from "../src/storage/D1FinanceRepository";
 import type { SqlDatabase } from "../src/storage/SqlDatabase";
 
 let testDatabaseNumber = 0;
-
-function createSettings(overrides: Partial<InstanceSettings> = {}): InstanceSettings {
-  return { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade", ...overrides };
-}
 
 async function createApplicationTestContext() {
   const context = await createMigratedLocalD1(`application-test-${++testDatabaseNumber}`);
