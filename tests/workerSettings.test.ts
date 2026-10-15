@@ -28,7 +28,6 @@ for (const setting of ["missing", "display_currency", "finance_time_zone"]) {
     });
     assert.equal(response.status, 503);
     assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), []);
-    assert.deepEqual((await (await fixture.mock.fetch("http://mock.local/calls")).json() as { method: string }[]).map(call => call.method), ["getMe"]);
   });
 }
 

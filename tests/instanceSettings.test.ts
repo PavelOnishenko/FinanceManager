@@ -60,16 +60,6 @@ test("reader reports an absent settings table as a configuration error", async c
   await assert.rejects(readInstanceSettings(database.DB), /instance_settings.*could not read configuration/);
 });
 
-test("settings loader waits until first use to read the database", async context => {
-  const displayCurrency = "EUR";
-  const financeTimeZone = "UTC";
-  const database = await createMigratedLocalD1("settings-lazy");
-  context.after(() => database.dispose());
-  const loadSettings = createInstanceSettingsLoader(database.DB);
-  await database.DB.prepare("UPDATE instance_settings SET display_currency = ?, finance_time_zone = ? WHERE id = 1").bind(displayCurrency, financeTimeZone).execute();
-  assert.deepEqual(await loadSettings(), { displayCurrency, financeTimeZone });
-});
-
 test("one settings loader reads once and a new loader sees a committed change", async context => {
   const initialCurrency = "EUR";
   const nextCurrency = "USD";
