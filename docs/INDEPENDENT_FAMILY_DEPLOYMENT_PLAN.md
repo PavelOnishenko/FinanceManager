@@ -472,6 +472,11 @@ Use the existing Node test runner and actual local D1 where storage behavior mat
 
 ### Task 1: Prove provider operations and pin the supported toolchain
 
+Local preparation (October 16, 2026): see [toolchain probe and owner next steps](INSTALLER_TOOLCHAIN_PROOF.md).
+Pinned CLI help, local Wrangler migration history/retry, settings preservation, and isolated-config dry-run were checked.
+Real provider operations, OAuth isolation, release/binding readback, and Windows packaging remain unverified;
+Task 1 remains open until its real disposable-instance acceptance gate passes.
+
 - [ ] Read the referenced provider documentation and inspect the pinned Wrangler CLI's actual help.
 - [ ] Reproduce the existing manual deployment recipe using a disposable bot and a separate test Cloudflare account.
 - [ ] Verify OAuth login, account enumeration, explicit account selection, database creation, migrations, secrets,
