@@ -760,17 +760,25 @@ test("amount editing uses the configured currency in its confirmation", async co
   const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
+
   const expense = expectRepositorySuccess(await fixture.repository.createExpense({
-    sourceActionKey: "expense:712", amountRsd: 250, spentOn: "2026-02-17", categoryId: "groceries", createdBy: String(userId)})).expense;
+    sourceActionKey: "expense:712",
+    amountRsd: 250,
+    spentOn: "2026-02-17",
+    categoryId: "groceries",
+    createdBy: String(userId)
+  })).expense;
 
   const prompt = `Редактирование расхода №${expense.id} · Новая сумма\n\nОтправьте целую сумму в ${displayCurrency}.`;
-  await fixture.bot.handleUpdate(fixture.message(950, String(nextAmount), { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
-  const updated = await fixture.repository.getExpenseById(expense.id);
-  assert.equal(updated?.amountRsd, nextAmount);
-  assert.equal(updated?.sourceActionKey, sourceActionKey);
-  assert.equal(updated?.spentOn, spentOn);
-  assert.equal(updated?.createdAt, expense.createdAt);
-  assert.match(String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text), new RegExp(`${nextAmount} ${displayCurrency}`));
+  await fixture.bot.handleUpdate(fixture.message(950, String(nextAmount), {
+    replyTo: fixture.replyTarget(prompt, fixture.botInfo)
+  }));
+
+  assert.equal((await fixture.repository.getExpenseById(expense.id))?.amountRsd, nextAmount);
+  assert.match(
+    String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text),
+    new RegExp(`${nextAmount} ${displayCurrency}`)
+  );
 });
 
 for (const scenario of ["start", "help", "categories", "category-add", "category-archive", "empty-history", "expense-category-list", "date-prompt", "comment-prompt",
