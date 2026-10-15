@@ -1,7 +1,8 @@
 # Independent family deployment: implementation plan
 
 Status: P0 implemented and locally verified on October 11, 2026. P1 fully completed:
-the owner confirmed live verification in demo and production on October 13, 2026. P2/P3 bot-side support is implemented and locally tested; remote migration/deployment and installer phases remain pending.
+the owner confirmed live verification in demo and production on October 13, 2026. P2/P3 bot-side support is complete
+and merged; the owner confirmed live verification in demo and production on October 15, 2026. Installer phases remain pending.
 The subsequent P1 repository-result refactor passed 83/83 tests on October 12, 2026. After removing nested ternaries,
 three focused tests, the type check, and the dry-run build passed. Local tests/check/build are authorized;
 commands accessing remote resources require an explicit owner decision.
@@ -234,9 +235,9 @@ along with type check and dry-run build. Existing expense/category rows are unch
 
 ### Task P2: Make the displayed currency configurable
 
-Bot-side implementation is complete. See [the settings contract](INSTANCE_SETTINGS.md) for supported labels,
-migration-seeded initial settings and the installer setup/change protocol. The owner still applies migrations
-and deploys; installer controls remain in Tasks 4 and 6.
+Bot-side implementation is complete and merged. The owner deployed and verified it in demo and production
+on October 15, 2026. See [the settings contract](INSTANCE_SETTINGS.md) for supported labels, migration-seeded
+initial settings and the installer setup/change protocol. Installer controls remain in Tasks 4 and 6.
 
 - [x] Define a required `display_currency` value in the single D1 settings row and validate a nonempty, supported label.
   Missing or invalid values must cause an explicit configuration failure, never imply `RSD`.
@@ -283,8 +284,9 @@ choosing and changing the label through the installer during the separate-accoun
 
 ### Task P3: Make the finance timezone configurable
 
-Bot-side support is implemented with P2 because this plan requires them to share a migration and ship together.
-Remote migration/deployment and installer controls remain pending. See [the settings contract](INSTANCE_SETTINGS.md).
+Bot-side support is complete and merged with P2; they share a migration and ship together. The owner deployed
+and verified both in demo and production on October 15, 2026. Installer controls remain pending in Tasks 4 and 6.
+See [the settings contract](INSTANCE_SETTINGS.md).
 
 - [x] Define a required `finance_time_zone` value in the same D1 settings row. Accept only a valid IANA timezone identifier
   supported by the Worker runtime; missing, invalid, or unsupported values must fail visibly, never imply `Europe/Belgrade`.
@@ -778,7 +780,7 @@ Stay on Free unless measurements justify an explicit owner-approved upgrade. Rec
 - [ ] The installer selects and later changes the finance timezone; existing stored expense dates and UTC timestamps remain unchanged.
 - [ ] New expense dates and relative-period boundaries follow the selected zone; that zone survives an update.
 - [ ] Both settings live in one D1 row in existing and new databases; missing/invalid values fail health and block settings-dependent expense writes.
-- [ ] Settings changes take effect without Worker deployment.
+- [x] Settings changes take effect without Worker deployment (owner-verified in demo and production on October 15, 2026).
 - [ ] A clean Windows x64 environment can run the delivered package without developer tools or manual commands.
 - [ ] The owner creates a bot and authorizes Cloudflare; all resource setup happens through the wizard.
 - [ ] Two enabled participants can use the existing finance journeys; unknown users are denied.
