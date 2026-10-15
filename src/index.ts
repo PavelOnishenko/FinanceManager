@@ -32,10 +32,12 @@ export default {
       return new Response("Not found", { status: 404 });
     } catch (error) {
       const cause = error instanceof BotError ? error.error : error;
-      if (!(cause instanceof InstanceConfigurationError))
-        throw error;
-      console.error(`Configuration failure: ${cause.message}`);
-      return Response.json({ status: "configuration-error", reason: cause.message }, { status: 503 });
+      if (cause instanceof InstanceConfigurationError) {
+        console.error(`Configuration failure: ${cause.message}`);
+        return Response.json({ status: "configuration-error", reason: cause.message }, { status: 503 });
+      }
+      
+      throw error;
     }
   }
 } satisfies ExportedHandler<Environment>;
