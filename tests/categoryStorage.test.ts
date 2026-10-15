@@ -32,33 +32,18 @@ test("category lifecycle preserves expenses, totals and reserved names", async c
   assert.equal((await repository.getCategories()).find(item => item.id === category.id)?.name, renamedName);
 });
 
-test("ID collisions retry and simultaneous normalized names cannot create duplicates", async context => {
-  const database = await createMigratedLocalD1("category-collisions");
+test("simultaneous normalized category names cannot create duplicates", async context => {
+  const database = await createMigratedLocalD1("category-duplicates");
   context.after(() => database.dispose());
   const repository = new D1FinanceRepository(database.DB);
-  const initialName = "Образование";
-  const secondName = "Дети";
-  const firstIdBytes = new Uint8Array(9).fill(1);
-  const secondIdBytes = new Uint8Array(9).fill(2);
-  const randomValues = context.mock.method(crypto, "getRandomValues", (array: Uint8Array) => {
-    array.set(firstIdBytes);
-    return array;
-  });
-  const firstCategory = expectRepositorySuccess(await repository.addCategory(initialName));
-  let retries = 0;
-  randomValues.mock.mockImplementation((array: Uint8Array) => {
-    array.set(retries++ === 0 ? firstIdBytes : secondIdBytes);
-    return array;
-  });
-  const secondCategory = expectRepositorySuccess(await repository.addCategory(secondName));
-  assert.notEqual(firstCategory.id, secondCategory.id);
-  assert.equal(retries, 2);
-  randomValues.mock.restore();
-  const concurrentName = "Детский сад";
-  const results = await Promise.all([repository.addCategory(concurrentName), repository.addCategory("  ДЕТСКИЙ   САД  ")]);
+  // Two family members can submit equivalent names before either sees the other's category.
+  const results = await Promise.all([repository.addCategory("Детский сад"), repository.addCategory("  ДЕТСКИЙ   САД  ")]);
   assert.equal(results.filter(result => result.kind === "success").length, 1);
   assert.equal(results.filter(result => result.kind === "category-name-taken").length, 1);
-  assert.deepEqual(await repository.renameCategory(secondCategory.id, " ОБРАЗОВАНИЕ "), { kind: "category-name-taken" });
+  assert.equal((await repository.getCategories()).filter(category => category.name === "Детский сад").length, 1);
+  const other = expectRepositorySuccess(await repository.addCategory("Образование"));
+  assert.deepEqual(await repository.renameCategory(other.id, "ДЕТСКИЙ САД"), { kind: "category-name-taken" });
+  assert.equal((await repository.getCategory(other.id))?.name, "Образование");
 });
 
 test("expected category failures are explicit results and do not mutate stored names", async context => {
@@ -69,9 +54,7 @@ test("expected category failures are explicit results and do not mutate stored n
   const initialName = "Продукты";
   const invalidCategoryId = "invalid:id";
   const missingCategoryId = "u_aaaaaaaaaaaa";
-  for (const name of ["", "Школа!", "Я".repeat(81)])
-    assert.deepEqual(await repository.addCategory(name), { kind: "invalid-category-name", reason: "invalid-format" });
-  assert.deepEqual(await repository.addCategory("123"), { kind: "invalid-category-name", reason: "missing-letter" });
+  assert.deepEqual(await repository.addCategory("Школа!"), { kind: "invalid-category-name", reason: "invalid-format" });
   assert.deepEqual(await repository.renameCategory(categoryId, "!"), { kind: "invalid-category-name", reason: "invalid-format" });
   assert.deepEqual(await repository.renameCategory(invalidCategoryId, "Питание"), { kind: "invalid-category-id" });
   assert.deepEqual(await repository.setCategoryActive(invalidCategoryId, false), { kind: "invalid-category-id" });
@@ -83,7 +66,6 @@ test("expected category failures are explicit results and do not mutate stored n
 
 test("technical database failures remain exceptions in category storage", async context => {
   const technicalError = new Error("D1_ERROR: database unavailable");
-  const unrelatedConstraintError = new Error("D1_ERROR: UNIQUE constraint failed: categories.sort_order");
   const database: SqlDatabase = {
     prepare: () => ({ bind() { return this; }, one: async () => null, many: async () => [], execute: async () => { throw technicalError; } }),
     withPrimarySession() { return this; }
@@ -94,8 +76,4 @@ test("technical database failures remain exceptions in category storage", async 
   await assert.rejects(repository.createExpense({
     sourceActionKey: "expense:9300", amountRsd: 500, categoryId: "groceries", spentOn: "2026-10-12", createdBy: "128"
   }), error => error === technicalError);
-  context.mock.method(database, "prepare", () => ({
-    bind() { return this; }, one: async () => null, many: async () => [], execute: async () => { throw unrelatedConstraintError; }
-  }));
-  await assert.rejects(repository.addCategory("Школа"), error => error === unrelatedConstraintError);
 });

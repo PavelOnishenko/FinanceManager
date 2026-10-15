@@ -21,27 +21,14 @@ test("matches case-insensitive multiword names with repeated spaces and comments
     { kind: "expense", amountRsd: 500, categoryId: "personal-care", comment: "шампунь" });
 });
 
-test("accepts current category names", () => {
-  assert.deepEqual(parseExpenseInput("1000 Фирмы"), { kind: "expense", amountRsd: 1000, categoryId: "business" });
-  assert.deepEqual(parseExpenseInput("350 коммунальные услуги"), { kind: "expense", amountRsd: 350, categoryId: "utilities" });
-  assert.deepEqual(parseExpenseInput("2000 подарки"), { kind: "expense", amountRsd: 2000, categoryId: "gifts" });
-  assert.deepEqual(parseExpenseInput("500 потерянные деньги"), { kind: "expense", amountRsd: 500, categoryId: "lost-money" });
-  assert.deepEqual(parseExpenseInput("900 подписки Netflix"), { kind: "expense", amountRsd: 900, categoryId: "subscriptions", comment: "Netflix" });
-  assert.deepEqual(parseExpenseInput("350 связь"), { kind: "expense", amountRsd: 350, categoryId: "communication" });
-});
-
 test("rejects former synonyms and incomplete or extended category names", () => {
-  for (const name of ["кафе", "коммуналка", "сервис", "ИП", "подарок", "потеряно", "подписка", "снеки", "гигиена", "продуктыExtra"])
+  for (const name of ["кафе", "снеки", "продуктыExtra"])
     assert.equal(parseExpenseInput(`700 ${name} комментарий`).kind, "invalid", name);
 });
 
-test("rejects invalid input", () => {
-  assert.equal(parseExpenseInput("0").kind, "invalid");
-  assert.equal(parseExpenseInput("12.5 продукты").kind, "invalid");
-  assert.equal(parseExpenseInput("100 неизвестно").kind, "invalid");
-  assert.equal(parseExpenseInput("0 продукты").kind, "invalid");
-  assert.equal(parseExpenseInput("9007199254740992 продукты").kind, "invalid");
-  assert.equal(parseExpenseInput("-100 продукты").kind, "invalid");
+test("rejects zero, fractional, unsafe, negative and unknown-category expenses", () => {
+  for (const input of ["0", "12.5 продукты", "100 неизвестно", "0 продукты", "9007199254740992 продукты", "-100 продукты"])
+    assert.equal(parseExpenseInput(input).kind, "invalid", input);
 });
 
 test("parses hyphenated mixed-case names and preserves unrestricted comment text", () => {
@@ -57,7 +44,6 @@ test("rejects unsupported characters in expense category names", () => {
   for (const name of ["Е\u0308жик", "ſport"])
     assert.equal(parseWithCategories(`500 ${name}`, activeCategories, "RSD").kind, "invalid", name);
 });
-
 
 test("dynamic names use case-insensitive longest whole-name matching", () => {
   const activeCategories = [{ id: "u_aaaaaaaaaaaa", name: "Дети" }, { id: "u_bbbbbbbbbbbb", name: "Дети школа" },

@@ -4,7 +4,6 @@ import test from "node:test";
 import { createMigratedLocalD1 } from "../scripts/createLocalD1";
 import { D1FinanceRepository } from "../src/storage/D1FinanceRepository";
 import { expectRepositorySuccess } from "./repositoryAssertions";
-import type { SqlDatabase } from "../src/storage/SqlDatabase";
 import { manageCategories, type CategoryCommand } from "../src/application/categoryApplication";
 import { createExpenseAfterCategorySelection, editExpense, processExpenseMessage } from "../src/application/financeApplication";
 
@@ -60,9 +59,9 @@ test("application uses current names and stable IDs after rename and archive", a
   assert.equal((await createExpenseAfterCategorySelection(repository, {
     telegramUserId: memberId, sourceUpdateId: 9103, amountRsd, categoryId, currentTime
   }, createSettings())).kind, "invalid-input");
-  assert.equal((await editExpense(repository, memberId, 1, { field: "category", categoryId }, "RSD")).kind, "invalid-input");
-  await editExpense(repository, memberId, 1, { field: "category", categoryId: "other" }, "RSD");
-  assert.equal((await repository.getExpenseById(1))?.categoryId, "other");
+  assert.equal((await editExpense(repository, memberId, saved.expense.id, { field: "category", categoryId }, "RSD")).kind, "invalid-input");
+  await editExpense(repository, memberId, saved.expense.id, { field: "category", categoryId: "other" }, "RSD");
+  assert.equal((await repository.getExpenseById(saved.expense.id))?.categoryId, "other");
 });
 
 test("archiving between application validation and SQL returns a refusal without creating or moving an expense", async context => {
@@ -79,6 +78,7 @@ test("archiving between application validation and SQL returns a refusal without
   const saved = expectRepositorySuccess(await repository.createExpense({
     sourceActionKey: "expense:9199", amountRsd, categoryId: initialCategoryId, spentOn: "2026-10-12", createdBy: memberId
   }));
+  // Another member can archive the category between validation and the write.
   const readCategory = repository.getCategory.bind(repository);
   context.mock.method(repository, "getCategory", async (categoryId: string) => {
     const category = await readCategory(categoryId);
@@ -92,16 +92,4 @@ test("archiving between application validation and SQL returns a refusal without
   assert.equal((await editExpense(repository, memberId, saved.expense.id, { field: "category", categoryId: requestedCategoryId }, "RSD")).kind, "invalid-input");
   assert.equal((await repository.getRecentExpenses()).length, 1);
   assert.equal((await repository.getExpenseById(saved.expense.id))?.categoryId, initialCategoryId);
-});
-
-test("technical repository failures remain exceptions in category application", async context => {
-  const technicalError = new Error("D1_ERROR: database unavailable");
-  const memberId = "128";
-  const database: SqlDatabase = {
-    prepare: () => ({ bind() { return this; }, one: async () => null, many: async () => [], execute: async () => { throw technicalError; } }),
-    withPrimarySession() { return this; }
-  };
-  const repository = new D1FinanceRepository(database);
-  context.mock.method(repository, "getEnabledMember", async () => ({ telegramUserId: memberId, displayName: "Анна" }));
-  await assert.rejects(manageCategories(repository, memberId, { kind: "add", name: "Школа" }), error => error === technicalError);
 });

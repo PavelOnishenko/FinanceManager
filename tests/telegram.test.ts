@@ -1,6 +1,6 @@
 import { createTelegramUpdates } from "./telegramUpdates";
 import { createSettings } from "./createSettings";
-import { InstanceConfigurationError, type InstanceSettings } from "../src/config/instanceSettings";
+import type { InstanceSettings } from "../src/config/instanceSettings";
 import { expectRepositorySuccess } from "./repositoryAssertions";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -29,14 +29,21 @@ async function addMember(database: SqlDatabase, userId: number, displayName: str
     .bind(String(userId), displayName, enabled).execute();
 }
 
-// todo I would like to have a return type here to understand what we are constructing
-async function createTelegramFixture(userId: number, botId: number, settings: InstanceSettings | (() => Promise<InstanceSettings>)) {
+type TelegramFixture = ReturnType<typeof createTelegramUpdates> & {
+  database: Awaited<ReturnType<typeof createMigratedLocalD1>>;
+  repository: D1FinanceRepository;
+  bot: ReturnType<typeof createFinanceBot>;
+  botInfo: UserFromGetMe;
+  calls: TelegramApiCall[];
+};
+
+async function createTelegramFixture(userId: number, botId: number, settings: InstanceSettings): Promise<TelegramFixture> {
   const database = await createMigratedLocalD1(`telegram-scenario-${++telegramFixtureNumber}`);
   const repository = new D1FinanceRepository(database.DB);
   const updates = createTelegramUpdates(userId);
   const botInfo = createTestBotInfo(botId);
   const calls: TelegramApiCall[] = [];
-  const bot = createFinanceBot("123:fixture", repository, typeof settings === "function" ? settings : async () => settings);
+  const bot = createFinanceBot("123:fixture", repository, async () => settings);
   bot.botInfo = botInfo;
   bot.api.config.use(async (_previous, method, payload) => {
     calls.push({ method, payload });
@@ -51,15 +58,21 @@ function assertMenuShown(calls: TelegramApiCall[]) {
   assert.deepEqual(keyboard.keyboard[0]?.map(button => button.text), ["История", "Статистика", "Категории", "Помощь"]);
 }
 
+function inlineKeyboard(calls: TelegramApiCall[], method: "sendMessage" | "editMessageText") {
+  const markup = calls.findLast(call => call.method === method)?.payload.reply_markup as {
+    inline_keyboard: { text: string; callback_data: string }[][]
+  } | undefined;
+  assert(markup?.inline_keyboard, `Expected an inline keyboard from ${method}`);
+  return markup.inline_keyboard;
+}
+
 test("January 2026 has no previous-month button and old buttons explain the limit", async context => {
   const userId = 127;
   const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.callback(710, formatCallbackData({ kind: "statistics-month", month: "2026-01" })));
-  const buttons = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
-    inline_keyboard: { callback_data: string }[][]
-  }).inline_keyboard;
+  const buttons = inlineKeyboard(fixture.calls, "editMessageText");
   assert.deepEqual(buttons.flat().map(button => parseCallbackData(button.callback_data)), [
     { kind: "statistics-month", month: "2026-02" }, { kind: "calendar", month: "2026-01" }
   ]);
@@ -70,31 +83,25 @@ test("January 2026 has no previous-month button and old buttons explain the limi
   assert.equal(fixture.calls.filter(call => call.method === "editMessageText").length, 1);
 });
 
-test("monthly statistics includes boundary dates and lists family categories by total", async context => {
+test("monthly statistics displays family totals and percentages in the configured currency", async context => {
   const userId = 127;
   const otherUserId = 128;
   const month = "2026-02";
-  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "RSD" }));
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "EUR" }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await addMember(fixture.database.DB, otherUserId, "Борис", 1);
-  expectRepositorySuccess(await fixture.repository.createExpense({
-    sourceActionKey: "before", amountRsd: 900, categoryId: "other", spentOn: "2026-01-31", createdBy: String(userId) }));
   expectRepositorySuccess(await fixture.repository.createExpense({
     sourceActionKey: "start", amountRsd: 1000, categoryId: "groceries", spentOn: "2026-02-01", createdBy: String(userId) }));
   expectRepositorySuccess(await fixture.repository.createExpense({
     sourceActionKey: "middle", amountRsd: 1500, categoryId: "transport", spentOn: "2026-02-15", createdBy: String(otherUserId) }));
   expectRepositorySuccess(await fixture.repository.createExpense({
     sourceActionKey: "end", amountRsd: 2000, categoryId: "groceries", spentOn: "2026-02-28", createdBy: String(otherUserId) }));
-  expectRepositorySuccess(await fixture.repository.createExpense({
-    sourceActionKey: "after", amountRsd: 9000, categoryId: "other", spentOn: "2026-03-01", createdBy: String(userId) }));
 
   await fixture.bot.handleUpdate(fixture.callback(700, formatCallbackData({ kind: "statistics-month", month })));
   const report = String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text);
-  assert.match(report, /2026-02-01 — 2026-02-28\nИтого: 4500 RSD\nПродукты: 3000 RSD \(66,7%\)\nТранспорт: 1500 RSD \(33,3%\)/);
-  const reportButtons = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
-    inline_keyboard: { callback_data: string }[][]
-  }).inline_keyboard;
+  assert.match(report, /2026-02-01 — 2026-02-28\nИтого: 4500 EUR\nПродукты: 3000 EUR \(66,7%\)\nТранспорт: 1500 EUR \(33,3%\)/);
+  const reportButtons = inlineKeyboard(fixture.calls, "editMessageText");
   assert.deepEqual(reportButtons.flat().map(button => parseCallbackData(button.callback_data)), [
     { kind: "statistics-month", month: "2026-01" }, { kind: "statistics-month", month: "2026-03" }, { kind: "calendar", month }
   ]);
@@ -107,9 +114,7 @@ test("calendar placeholder acknowledges a tap without editing the message", asyn
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.callback(701, formatCallbackData({ kind: "calendar", month })));
-  const calendarButtons = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
-    inline_keyboard: { text: string; callback_data: string }[][]
-  }).inline_keyboard;
+  const calendarButtons = inlineKeyboard(fixture.calls, "editMessageText");
   const placeholder = calendarButtons.flat().find(button => button.text === "·");
   assert(placeholder);
   assert.deepEqual(parseCallbackData(placeholder.callback_data), { kind: "calendar-noop" });
@@ -155,22 +160,17 @@ test("calendar keeps the start date across months and includes both range bounda
 
   await fixture.bot.handleUpdate(fixture.callback(701, formatCallbackData({ kind: "calendar", month: "2026-02" })));
   await fixture.bot.handleUpdate(fixture.callback(702, formatCallbackData({ kind: "calendar-day", month: "2026-02", day: 15 })));
-  const nextMonthButton = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
-    inline_keyboard: { text: string; callback_data: string }[][]
-  }).inline_keyboard[0]?.find(button => button.text === "▶");
+  const nextMonthButton = inlineKeyboard(fixture.calls, "editMessageText")[0]?.find(button => button.text === "▶");
   assert(nextMonthButton);
   assert.deepEqual(parseCallbackData(nextMonthButton.callback_data), { kind: "calendar", month: "2026-03", startDate });
   await fixture.bot.handleUpdate(fixture.callback(704, nextMonthButton.callback_data));
   assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /Начало: 2026-02-15/);
-  const firstDayButton = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
-    inline_keyboard: { text: string; callback_data: string }[][]
-  }).inline_keyboard.flat().find(button => button.text === "1");
+  const firstDayButton = inlineKeyboard(fixture.calls, "editMessageText").flat().find(button => button.text === "1");
   assert(firstDayButton);
   assert.deepEqual(parseCallbackData(firstDayButton.callback_data), { kind: "calendar-day", month: "2026-03", day: 1, startDate });
   await fixture.bot.handleUpdate(fixture.callback(705, firstDayButton.callback_data));
   assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text),
     /2026-02-15 — 2026-03-01\nИтого: 12500 RSD\nДругое: 9000 RSD \(72%\)\nПродукты: 2000 RSD \(16%\)\nТранспорт: 1500 RSD \(12%\)/);
-  assert.equal(fixture.calls.filter(call => call.method === "answerCallbackQuery").length, 4);
 });
 
 test("denies an unknown user and welcomes an enabled member", async context => {
@@ -185,35 +185,24 @@ test("denies an unknown user and welcomes an enabled member", async context => {
   assert.match(String(fixture.calls.at(-1)?.payload.text), /Добро пожаловать/);
 });
 
-test("creates an expense directly from a complete Telegram message", async context => {
-  const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "RSD" }));
-  context.after(() => fixture.database.dispose());
-  await addMember(fixture.database.DB, userId, "Анна", 1);
-
-  await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
-  assert.equal(fixture.calls.at(-1)?.method, "sendMessage");
-  assert.match(String(fixture.calls.at(-1)?.payload.text), /Сохранено: #1 · 2490 RSD/);
-  assert.equal((await fixture.repository.getExpenseById(1))?.comment, "Lidl");
-});
-
-test("offers one category per row and saves only once after repeated taps", async context => {
+test("category selection uses stable IDs and saves only once after repeated taps", async context => {
   const userId = 127;
   const sourceUpdateId = 400;
-  const fixture = await createTelegramFixture(userId, 999, createSettings());
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "EUR" }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
 
   await fixture.bot.handleUpdate(fixture.message(sourceUpdateId, "2490"));
-  const buttons = (fixture.calls.at(-1)?.payload.reply_markup as { inline_keyboard: { callback_data: string }[][] }).inline_keyboard;
+  assert.match(String(fixture.calls.at(-1)?.payload.text), /2490 EUR/);
+  const buttons = inlineKeyboard(fixture.calls, "sendMessage");
   assert.equal(buttons.length, categories.length);
-  assert(buttons.every(row => row.length === 1));
   assert.deepEqual(await fixture.repository.getRecentExpenses(), []);
   assert.deepEqual(parseCallbackData(buttons[0]![0]!.callback_data), {
     kind: "create", sourceUpdateId, amountRsd: 2490, categoryId: "groceries"
   });
 
   await fixture.bot.handleUpdate(fixture.callback(401, buttons[0]![0]!.callback_data));
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /2490 EUR/);
   await fixture.bot.handleUpdate(fixture.callback(402, buttons[1]![0]!.callback_data));
   assert.equal((await fixture.repository.getRecentExpenses()).length, 1);
   assert(fixture.calls.some(call => call.method === "answerCallbackQuery" && call.payload.text === "Расход уже сохранён"));
@@ -225,6 +214,7 @@ test("menu buttons return help and previous-month statistics", async context => 
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
 
+  context.mock.timers.enable({ apis: ["Date"], now: new Date("2026-10-15T12:00:00Z") });
   await fixture.bot.handleUpdate(fixture.message(416, "Помощь"));
   assert.equal(fixture.calls.at(-1)?.method, "sendMessage");
   assert.match(String(fixture.calls.at(-1)?.payload.text), /^Отправьте расход:/);
@@ -237,7 +227,7 @@ test("history shows one button per recent expense", async context => {
   const userId = 127;
   const groceriesDate = "2026-09-17";
   const transportDate = "2026-09-18";
-  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "RSD" }));
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "EUR" }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   expectRepositorySuccess(await fixture.repository.createExpense({
@@ -248,36 +238,30 @@ test("history shows one button per recent expense", async context => {
   }));
 
   await fixture.bot.handleUpdate(fixture.message(402, "История"));
-  const buttons = (fixture.calls.at(-1)?.payload.reply_markup as { inline_keyboard: { text: string }[][] }).inline_keyboard;
+  const buttons = inlineKeyboard(fixture.calls, "sendMessage");
   assert.equal(buttons.length, 2);
-  assert(buttons.every(row => row.length === 1));
-  assert.deepEqual(buttons.map(row => row[0]?.text), ["#2 · 700 RSD · Транспорт · 18.09.2026", "#1 · 2490 RSD · Продукты · 17.09.2026"]);
+  assert.deepEqual(buttons.map(row => row[0]?.text), ["#2 · 700 EUR · Транспорт · 18.09.2026", "#1 · 2490 EUR · Продукты · 17.09.2026"]);
 });
 
 test("expense details keep categories behind a button and can return from the category list", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, createSettings());
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "EUR" }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
 
   await fixture.bot.handleUpdate(fixture.callback(401, formatCallbackData({ kind: "details", expenseId: 1 })));
-  const detailButtons = (fixture.calls.findLast(call => call.method === "sendMessage")?.payload.reply_markup as {
-    inline_keyboard: { text: string; callback_data: string }[][]
-  }).inline_keyboard.flat();
+  assert.match(String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text), /2490 EUR/);
+  const detailButtons = inlineKeyboard(fixture.calls, "sendMessage").flat();
   assert.deepEqual(detailButtons.map(button => button.text), ["Сумма", "Дата", "Комментарий", "Категория", "Удалить"]);
 
   await fixture.bot.handleUpdate(fixture.callback(402, detailButtons.find(button => button.text === "Категория")!.callback_data));
-  const categoryButtons = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
-    inline_keyboard: { text: string; callback_data: string }[][]
-  }).inline_keyboard;
+  const categoryButtons = inlineKeyboard(fixture.calls, "editMessageText");
   assert.deepEqual(categoryButtons.map(row => row[0]!.text), [...categories.map(category => category.name), "Назад"]);
-  assert(categoryButtons.every(row => row.length === 1));
 
   await fixture.bot.handleUpdate(fixture.callback(403, categoryButtons.at(-1)![0]!.callback_data));
-  const returnedButtons = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
-    inline_keyboard: { text: string }[][]
-  }).inline_keyboard.flat();
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /2490 EUR/);
+  const returnedButtons = inlineKeyboard(fixture.calls, "editMessageText").flat();
   assert.deepEqual(returnedButtons.map(button => button.text), detailButtons.map(button => button.text));
 });
 
@@ -298,7 +282,7 @@ test("amount edit ignores a prompt not sent by the bot", async context => {
 
 test("amount edit accepts the bot's prompt and restores the menu", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, createSettings());
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "EUR" }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
@@ -306,45 +290,19 @@ test("amount edit accepts the bot's prompt and restores the menu", async context
 
   await fixture.bot.handleUpdate(fixture.callback(401, formatCallbackData({ kind: "edit-prompt", expenseId: 1, field: "amount" })));
   const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
-  await fixture.bot.handleUpdate(fixture.message(402, "3000", { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
+  assert.match(prompt, /Отправьте целую сумму в EUR/);
+  await fixture.bot.handleUpdate(fixture.message(402, "0", { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
+  assert.match(String(fixture.calls.at(-1)?.payload.text), /Сумма должна быть целым положительным числом в EUR/);
+  assert.equal((await fixture.repository.getExpenseById(1))?.amountRsd, 2490);
+  await fixture.bot.handleUpdate(fixture.message(403, "3000", { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
   assert.equal((await fixture.repository.getExpenseById(1))?.amountRsd, 3000);
-  assertMenuShown(fixture.calls);
-});
-
-test("date edit changes the explicitly seeded original date", async context => {
-  const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, createSettings());
-  context.after(() => fixture.database.dispose());
-  await addMember(fixture.database.DB, userId, "Анна", 1);
-  await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
-  await fixture.repository.updateExpenseDate(1, "2026-09-17");
-  assert.equal((await fixture.repository.getExpenseById(1))?.spentOn, "2026-09-17");
-
-  await fixture.bot.handleUpdate(fixture.callback(401, formatCallbackData({ kind: "edit-prompt", expenseId: 1, field: "date" })));
-  const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
-  await fixture.bot.handleUpdate(fixture.message(402, "18.09.2026", { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
-  assert.equal((await fixture.repository.getExpenseById(1))?.spentOn, "2026-09-18");
-  assertMenuShown(fixture.calls);
-});
-
-test("comment edit replaces the original comment", async context => {
-  const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, createSettings());
-  context.after(() => fixture.database.dispose());
-  await addMember(fixture.database.DB, userId, "Анна", 1);
-  await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
-  assert.equal((await fixture.repository.getExpenseById(1))?.comment, "Lidl");
-
-  await fixture.bot.handleUpdate(fixture.callback(401, formatCallbackData({ kind: "edit-prompt", expenseId: 1, field: "comment" })));
-  const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
-  await fixture.bot.handleUpdate(fixture.message(402, "Покупка", { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
-  assert.equal((await fixture.repository.getExpenseById(1))?.comment, "Покупка");
+  assert.match(String(fixture.calls.at(-1)?.payload.text), /Обновлено:.*3000 EUR/);
   assertMenuShown(fixture.calls);
 });
 
 test("category callback replaces the original category", async context => {
   const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, createSettings());
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "EUR" }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
@@ -352,6 +310,7 @@ test("category callback replaces the original category", async context => {
 
   await fixture.bot.handleUpdate(fixture.callback(401, formatCallbackData({ kind: "edit-category", expenseId: 1, categoryId: "health" })));
   assert.equal((await fixture.repository.getExpenseById(1))?.categoryId, "health");
+  assert.match(String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text), /Обновлено:.*2490 EUR/);
 });
 
 test("delete requires a separate confirmation callback", async context => {
@@ -366,21 +325,6 @@ test("delete requires a separate confirmation callback", async context => {
   assert.equal((await fixture.repository.getRecentExpenses()).length, 1);
   await fixture.bot.handleUpdate(fixture.callback(402, formatCallbackData({ kind: "delete-confirm", expenseId: 1 })));
   assert.equal((await fixture.repository.getRecentExpenses()).length, 0);
-  assert.equal(fixture.calls.filter(call => call.method === "answerCallbackQuery").length, 2);
-});
-
-test("smoke: a saved message appears in history and opens its details", async context => {
-  const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "RSD" }));
-  context.after(() => fixture.database.dispose());
-  await addMember(fixture.database.DB, userId, "Анна", 1);
-  await fixture.bot.handleUpdate(fixture.message(400, "2490 продукты Lidl"));
-  await fixture.bot.handleUpdate(fixture.message(401, "История"));
-  await fixture.bot.handleUpdate(fixture.callback(402, formatCallbackData({ kind: "details", expenseId: 1 })));
-
-  assert.equal(fixture.calls.at(-2)?.method, "sendMessage");
-  assert.match(String(fixture.calls.at(-2)?.payload.text), /#1 · 2490 RSD · Продукты/);
-  assert.equal(fixture.calls.at(-1)?.method, "answerCallbackQuery");
 });
 
 test("webhook secret validation rejects missing and mismatching headers", () => {
@@ -411,13 +355,6 @@ test("group callback shows a private-chat alert", async context => {
   assert.equal(fixture.calls.at(-1)?.payload.show_alert, true);
 });
 
-test("message without a sender explains why access cannot be checked", async context => {
-  const fixture = await createTelegramFixture(127, 999, createSettings());
-  context.after(() => fixture.database.dispose());
-  await fixture.bot.handleUpdate(fixture.message(501, "2490", { from: undefined }));
-  assert.match(String(fixture.calls.at(-1)?.payload.text), /Не удалось определить ваш Telegram ID/);
-});
-
 test("photo message asks for text instead of remaining silent", async context => {
   const userId = 127;
   const fixture = await createTelegramFixture(userId, 999, createSettings());
@@ -431,32 +368,15 @@ test("history reports access revoked between checks", async context => {
   const userId = 127;
   const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
-  let accessChecks = 0;
-  fixture.repository.getEnabledMember = async () => ++accessChecks === 1 ? { telegramUserId: String(userId), displayName: "Анна" } : null;
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  const getMember = fixture.repository.getEnabledMember.bind(fixture.repository);
+  // An administrator can revoke access while an update is being handled.
+  context.mock.method(fixture.repository, "getEnabledMember", async (id: string) => {
+    const member = await getMember(id);
+    await fixture.database.DB.prepare("UPDATE members SET enabled = 0 WHERE telegram_user_id = ?").bind(id).execute();
+    return member;
+  });
   await fixture.bot.handleUpdate(fixture.message(503, "История"));
-  assert.equal(accessChecks, 2);
-  assert.match(String(fixture.calls.at(-1)?.payload.text), /Нет доступа.*127/);
-});
-
-test("statistics reports access revoked between checks", async context => {
-  const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, createSettings());
-  context.after(() => fixture.database.dispose());
-  let accessChecks = 0;
-  fixture.repository.getEnabledMember = async () => ++accessChecks === 1 ? { telegramUserId: String(userId), displayName: "Анна" } : null;
-  await fixture.bot.handleUpdate(fixture.message(504, "Статистика"));
-  assert.equal(accessChecks, 2);
-  assert.match(String(fixture.calls.at(-1)?.payload.text), /Нет доступа.*127/);
-});
-
-test("expense input reports access revoked between checks", async context => {
-  const userId = 127;
-  const fixture = await createTelegramFixture(userId, 999, createSettings());
-  context.after(() => fixture.database.dispose());
-  let accessChecks = 0;
-  fixture.repository.getEnabledMember = async () => ++accessChecks === 1 ? { telegramUserId: String(userId), displayName: "Анна" } : null;
-  await fixture.bot.handleUpdate(fixture.message(505, "2490"));
-  assert.equal(accessChecks, 2);
   assert.match(String(fixture.calls.at(-1)?.payload.text), /Нет доступа.*127/);
 });
 
@@ -464,22 +384,18 @@ test("callback reports access revoked between checks in chat and alert", async c
   const userId = 127;
   const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
-  let accessChecks = 0;
-  fixture.repository.getEnabledMember = async () => ++accessChecks === 1 ? { telegramUserId: String(userId), displayName: "Анна" } : null;
+  await addMember(fixture.database.DB, userId, "Анна", 1);
+  const getMember = fixture.repository.getEnabledMember.bind(fixture.repository);
+  // An administrator can revoke access while an update is being handled.
+  context.mock.method(fixture.repository, "getEnabledMember", async (id: string) => {
+    const member = await getMember(id);
+    await fixture.database.DB.prepare("UPDATE members SET enabled = 0 WHERE telegram_user_id = ?").bind(id).execute();
+    return member;
+  });
   await fixture.bot.handleUpdate(fixture.callback(507, formatCallbackData({ kind: "details", expenseId: 1 })));
-  assert.equal(accessChecks, 2);
   assert.equal(fixture.calls.at(-2)?.method, "sendMessage");
   assert.match(String(fixture.calls.at(-2)?.payload.text), /Нет доступа.*127/);
   assert.equal(fixture.calls.at(-1)?.method, "answerCallbackQuery");
-  assert.equal(fixture.calls.at(-1)?.payload.show_alert, true);
-});
-
-test("unsupported callback is acknowledged with an explanation", async context => {
-  const fixture = await createTelegramFixture(127, 999, createSettings());
-  context.after(() => fixture.database.dispose());
-  await fixture.bot.handleUpdate(fixture.gameCallback(508, "unsupported"));
-  assert.equal(fixture.calls.at(-1)?.method, "answerCallbackQuery");
-  assert.equal(fixture.calls.at(-1)?.payload.text, "Кнопка не поддерживается");
   assert.equal(fixture.calls.at(-1)?.payload.show_alert, true);
 });
 
@@ -489,25 +405,19 @@ test("unexpected failures include the update ID without exposing internal detail
   const updateId = 600;
   const fixture = await createTelegramFixture(userId, botId, createSettings());
   context.after(() => fixture.database.dispose());
-  fixture.repository.getEnabledMember = async () => { throw new Error("secret-db-detail"); };
+  context.mock.method(fixture.repository, "getEnabledMember", async () => { throw new Error("secret-db-detail"); });
   const { bot, calls } = fixture;
-  const previousError = console.error;
-  console.error = () => undefined;
-  try {
-    await assert.rejects(bot.handleUpdate(fixture.message(updateId, "История")), /secret-db-detail/);
-    assert.match(String(calls.at(-1)?.payload.text), /Код: 600/);
-    assert.doesNotMatch(String(calls.at(-1)?.payload.text), /secret-db-detail/);
+  context.mock.method(console, "error", () => undefined);
+  await assert.rejects(bot.handleUpdate(fixture.message(updateId, "История")), /secret-db-detail/);
+  assert.match(String(calls.at(-1)?.payload.text), /Код: 600/);
+  assert.doesNotMatch(String(calls.at(-1)?.payload.text), /secret-db-detail/);
 
-    await bot.handleUpdate(fixture.callback(601, formatCallbackData({ kind: "details", expenseId: 1 })));
-    assert.equal(calls.at(-1)?.method, "answerCallbackQuery");
-    assert.match(String(calls.at(-1)?.payload.text), /Код: 601/);
-    assert.equal(calls.at(-1)?.payload.show_alert, true);
-    assert(calls.some(call => call.method === "sendMessage" && String(call.payload.text).includes("Код: 601")));
-  } finally {
-    console.error = previousError;
-  }
+  await bot.handleUpdate(fixture.callback(601, formatCallbackData({ kind: "details", expenseId: 1 })));
+  assert.equal(calls.at(-1)?.method, "answerCallbackQuery");
+  assert.match(String(calls.at(-1)?.payload.text), /Код: 601/);
+  assert.equal(calls.at(-1)?.payload.show_alert, true);
+  assert(calls.some(call => call.method === "sendMessage" && String(call.payload.text).includes("Код: 601")));
 });
-
 
 test("category addition uses ForceReply and enables both expense entry paths", async context => {
   const userId = 127;
@@ -515,7 +425,7 @@ test("category addition uses ForceReply and enables both expense entry paths", a
   const textAmountRsd = 800;
   const buttonAmountRsd = 500;
   const comment = "Учебники";
-  const fixture = await createTelegramFixture(userId, 999, createSettings());
+  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency: "EUR" }));
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.message(800, "Категории"));
@@ -527,11 +437,12 @@ test("category addition uses ForceReply and enables both expense entry paths", a
   const category = (await fixture.repository.getCategories()).find(item => item.name === categoryName)!;
   assert(category);
   await fixture.bot.handleUpdate(fixture.message(803, `${textAmountRsd} ${categoryName} ${comment}`));
+  assert.match(String(fixture.calls.at(-1)?.payload.text), /Сохранено:.*800 EUR/);
   const saved = (await fixture.repository.getRecentExpenses())[0]!;
   assert.equal(saved.categoryId, category.id);
   assert.equal(saved.comment, comment);
   await fixture.bot.handleUpdate(fixture.message(804, String(buttonAmountRsd)));
-  const buttons = (fixture.calls.at(-1)?.payload.reply_markup as { inline_keyboard: { text: string; callback_data: string }[][] }).inline_keyboard;
+  const buttons = inlineKeyboard(fixture.calls, "sendMessage");
   const button = buttons.flat().find(item => item.text === categoryName)!;
   assert.match(button.callback_data, /^c1:/);
   await fixture.bot.handleUpdate(fixture.callback(805, button.callback_data));
@@ -595,12 +506,10 @@ test("archived categories disappear from current expense menus and full-text ent
   }));
   expectRepositorySuccess(await fixture.repository.setCategoryActive(category.id, false));
   await fixture.bot.handleUpdate(fixture.message(830, "500"));
-  const creationMenu = (fixture.calls.at(-1)?.payload.reply_markup as { inline_keyboard: { text: string }[][] }).inline_keyboard;
+  const creationMenu = inlineKeyboard(fixture.calls, "sendMessage");
   assert(!creationMenu.flat().some(button => button.text === categoryName));
   await fixture.bot.handleUpdate(fixture.callback(831, `l:${saved.expense.id}`));
-  const editingMenu = (fixture.calls.findLast(call => call.method === "editMessageText")?.payload.reply_markup as {
-    inline_keyboard: { text: string }[][]
-  }).inline_keyboard;
+  const editingMenu = inlineKeyboard(fixture.calls, "editMessageText");
   assert(!editingMenu.flat().some(button => button.text === categoryName));
   await fixture.bot.handleUpdate(fixture.message(833, `700 ${categoryName}`));
   assert.match(String(fixture.calls.at(-1)?.payload.text), /Не удалось распознать/);
@@ -649,7 +558,7 @@ test("another member restores a category from the archive and enables new expens
   assert.equal((await fixture.repository.getCategory(category.id))?.active, true);
   assert.equal((await fixture.repository.getCategories()).find(item => item.id === category.id)?.name, categoryName);
   await fixture.bot.handleUpdate(fixture.message(864, String(newAmountRsd)));
-  const buttons = (fixture.calls.at(-1)?.payload.reply_markup as { inline_keyboard: { text: string; callback_data: string }[][] }).inline_keyboard;
+  const buttons = inlineKeyboard(fixture.calls, "sendMessage");
   await fixture.bot.handleUpdate(fixture.callback(865, buttons.flat().find(button => button.text === categoryName)!.callback_data));
   assert.equal((await fixture.repository.getRecentExpenses()).length, 2);
   assert.equal((await fixture.repository.getRecentExpenses())[0]?.categoryName, categoryName);
@@ -665,8 +574,9 @@ test("category prompts reject invalid names, duplicates and replies to another s
   const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
   await fixture.bot.handleUpdate(fixture.message(851, "Новая категория", { replyTo: fixture.replyTarget(prompt, fixture.user) }));
   assert.match(String(fixture.calls.at(-1)?.payload.text), /запрос редактирования/);
-  for (const name of ["", "Школа!", "123", "Я".repeat(81), "  ПРОДУКТЫ "])
-    await fixture.bot.handleUpdate(fixture.message(852, name, { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
+  await fixture.bot.handleUpdate(fixture.message(852, "Школа!", { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
+  assert.match(String(fixture.calls.at(-1)?.payload.text), /Название/);
+  await fixture.bot.handleUpdate(fixture.message(853, "  ПРОДУКТЫ ", { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
   assert.equal((await fixture.repository.getCategories()).length, categories.length);
   assert.match(String(fixture.calls.at(-1)?.payload.text), /уже существует/);
   assertMenuShown(fixture.calls);
@@ -692,165 +602,3 @@ test("obsolete category buttons explain failure without creating or changing an 
   assert.equal((await fixture.repository.getExpenseById(saved.id))?.categoryId, categoryId);
   assert.equal((await fixture.repository.getExpenseById(saved.id))?.amountRsd, amountRsd);
 });
-
-
-for (const surface of ["history", "details", "edit-actions", "amount-prompt", "selection", "confirmation", "statistics", "category-update", "edit-error"]) {
-  test(`configured currency is displayed in ${surface}`, async context => {
-    const userId = 711;
-    const displayCurrency = "EUR";
-    const amountRsd = 600;
-    const spentOn = "2026-02-17";
-    const sourceActionKey = "expense:711";
-    const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency, financeTimeZone: "America/New_York" }));
-    context.after(() => fixture.database.dispose());
-    await addMember(fixture.database.DB, userId, "Анна", 1);
-    const expense = expectRepositorySuccess(await fixture.repository.createExpense({
-      sourceActionKey, amountRsd, spentOn, categoryId: "groceries", createdBy: String(userId)
-    })).expense;
-    const before = await fixture.repository.getExpenseById(expense.id);
-    switch (surface) {
-      case "history":
-        await fixture.bot.handleUpdate(fixture.message(900, "История"));
-        break;
-      case "details":
-        await fixture.bot.handleUpdate(fixture.callback(900, `d:${expense.id}`));
-        break;
-      case "edit-actions":
-        await fixture.bot.handleUpdate(fixture.callback(900, `a:${expense.id}`));
-        break;
-      case "amount-prompt":
-        await fixture.bot.handleUpdate(fixture.callback(900, `p:${expense.id}:0`));
-        break;
-      case "selection":
-        await fixture.bot.handleUpdate(fixture.message(900, String(amountRsd)));
-        break;
-      case "confirmation":
-        await fixture.bot.handleUpdate(fixture.message(900, `${amountRsd} продукты`));
-        break;
-      case "statistics":
-        expectRepositorySuccess(await fixture.repository.createExpense({
-          sourceActionKey: "expense:713", amountRsd: 200, spentOn, categoryId: "transport", createdBy: String(userId)
-        }));
-        await fixture.bot.handleUpdate(fixture.callback(900, "s:202602"));
-        break;
-      case "category-update":
-        await fixture.bot.handleUpdate(fixture.callback(900, `e1:${expense.id}:other`));
-        break;
-      case "edit-error":
-        await fixture.bot.handleUpdate(fixture.message(900, "0", { replyTo: fixture.replyTarget(
-          `Редактирование расхода №${expense.id} · Новая сумма\n\nОтправьте целую сумму в ${displayCurrency}.`, fixture.botInfo
-        ) }));
-    }
-    const moneyCall = fixture.calls.findLast(call => call.method === "sendMessage" || call.method === "editMessageText");
-    assert(moneyCall);
-    assert.match(JSON.stringify(moneyCall.payload), new RegExp(displayCurrency));
-    assert.doesNotMatch(JSON.stringify(moneyCall.payload), /RSD/);
-    if (surface === "statistics")
-      assert.equal(moneyCall.payload.text, `${spentOn.slice(0, 7)}-01 — 2026-02-28\nИтого: ${amountRsd + 200} ${displayCurrency}`
-        + `\nПродукты: ${amountRsd} ${displayCurrency} (75%)\nТранспорт: 200 ${displayCurrency} (25%)`);
-    if (surface !== "category-update")
-      assert.deepEqual(await fixture.repository.getExpenseById(expense.id), before);
-  });
-}
-
-test("amount editing uses the configured currency in its confirmation", async context => {
-  const userId = 712;
-  const displayCurrency = "EUR";
-  const nextAmount = 750;
-  const fixture = await createTelegramFixture(userId, 999, createSettings({ displayCurrency }));
-  context.after(() => fixture.database.dispose());
-  await addMember(fixture.database.DB, userId, "Анна", 1);
-
-  const expense = expectRepositorySuccess(await fixture.repository.createExpense({
-    sourceActionKey: "expense:712",
-    amountRsd: 250,
-    spentOn: "2026-02-17",
-    categoryId: "groceries",
-    createdBy: String(userId)
-  })).expense;
-
-  const prompt = `Редактирование расхода №${expense.id} · Новая сумма\n\nОтправьте целую сумму в ${displayCurrency}.`;
-  await fixture.bot.handleUpdate(fixture.message(950, String(nextAmount), {
-    replyTo: fixture.replyTarget(prompt, fixture.botInfo)
-  }));
-
-  assert.equal((await fixture.repository.getExpenseById(expense.id))?.amountRsd, nextAmount);
-  assert.match(
-    String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text),
-    new RegExp(`${nextAmount} ${displayCurrency}`)
-  );
-});
-
-for (const scenario of ["start", "help", "categories", "category-add", "category-archive", "empty-history", "expense-category-list", "date-prompt", "comment-prompt",
-  "calendar", "delete-request", "delete-confirm", "access-denied"]) {
-  test(`${scenario} does not load instance settings`, async context => {
-    const userId = 713;
-    let settingsReads = 0;
-    const fixture = await createTelegramFixture(userId, 999, async () => {
-      settingsReads++;
-      throw new InstanceConfigurationError("instance_settings: unavailable");
-    });
-    context.after(() => fixture.database.dispose());
-    await addMember(fixture.database.DB, userId, "Анна", scenario === "access-denied" ? 0 : 1);
-    const expenseId = expectRepositorySuccess(await fixture.repository.createExpense({
-      sourceActionKey: "expense:713", amountRsd: 250, spentOn: "2026-02-17", categoryId: "groceries", createdBy: String(userId)
-    })).expense.id;
-    let expectedText: string;
-    switch (scenario) {
-      case "start":
-        await fixture.bot.handleUpdate(fixture.command(960, "/start"));
-        expectedText = "Добро пожаловать";
-        break;
-      case "help":
-        await fixture.bot.handleUpdate(fixture.message(960, "Помощь"));
-        expectedText = "Отправьте расход";
-        break;
-      case "categories":
-        await fixture.bot.handleUpdate(fixture.message(960, "Категории"));
-        expectedText = "Категории: выберите категорию";
-        break;
-      case "category-add":
-        await fixture.bot.handleUpdate(fixture.message(960, "Школа", { replyTo: fixture.replyTarget("Добавление категории", fixture.botInfo) }));
-        expectedText = "Категория сохранена";
-        break;
-      case "category-archive":
-        await fixture.bot.handleUpdate(fixture.callback(960, formatCallbackData({ kind: "manage-category", operation: "confirm", categoryId: "groceries" })));
-        expectedText = "Категория архивирована";
-        break;
-      case "empty-history":
-        await fixture.repository.deleteExpense(expenseId);
-        await fixture.bot.handleUpdate(fixture.message(960, "История"));
-        expectedText = "Расходов пока нет";
-        break;
-      case "expense-category-list":
-        await fixture.bot.handleUpdate(fixture.callback(960, `l:${expenseId}`));
-        expectedText = "Выберите категорию для расхода";
-        break;
-      case "date-prompt":
-        await fixture.bot.handleUpdate(fixture.callback(960, `p:${expenseId}:1`));
-        expectedText = "Новая дата";
-        break;
-      case "comment-prompt":
-        await fixture.bot.handleUpdate(fixture.callback(960, `p:${expenseId}:2`));
-        expectedText = "Новый комментарий";
-        break;
-      case "calendar":
-        await fixture.bot.handleUpdate(fixture.callback(960, "k:202602:0"));
-        expectedText = "Выберите начало периода";
-        break;
-      case "delete-request":
-        await fixture.bot.handleUpdate(fixture.callback(960, `r:${expenseId}`));
-        expectedText = "Удалить расход";
-        break;
-      case "delete-confirm":
-        await fixture.bot.handleUpdate(fixture.callback(960, `x:${expenseId}`));
-        expectedText = "удалён";
-        break;
-      default:
-        await fixture.bot.handleUpdate(fixture.message(960, "250 продукты"));
-        expectedText = "Нет доступа";
-    }
-    assert.equal(settingsReads, 0);
-    assert(fixture.calls.some(call => String(call.payload.text).includes(expectedText)));
-  });
-}

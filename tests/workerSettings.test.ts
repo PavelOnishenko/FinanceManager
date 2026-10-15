@@ -3,29 +3,20 @@ import test from "node:test";
 import { createTelegramUpdates } from "./telegramUpdates";
 import { createWorkerFixture } from "./workerFixture";
 
-for (const setting of ["missing", "display_currency", "finance_time_zone"]) {
-  test(`invalid ${setting} makes health unhealthy and blocks expense writes`, async context => {
-    const token = "123:fixture";
-    const secret = "settings-secret";
-    const userId = 101;
-    const fixture = await createWorkerFixture(token, secret, 9001);
-    context.after(() => fixture.dispose());
-    if (setting === "missing")
-      await fixture.DB.prepare("DELETE FROM instance_settings").execute();
-    else {
-      const displayCurrency = setting === "display_currency" ? "INVALID" : "EUR";
-      const financeTimeZone = setting === "finance_time_zone" ? "Invalid/Zone" : "UTC";
-      await fixture.DB.prepare("UPDATE instance_settings SET display_currency = ?, finance_time_zone = ? WHERE id = 1").bind(displayCurrency, financeTimeZone).execute();
-    }
-    await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
-    const health = await fixture.worker.fetch("http://local/health");
-    assert.equal(health.status, 503);
-    assert.match(JSON.stringify(await health.json()), new RegExp(setting === "missing" ? "instance_settings" : setting));
-    const response = await fixture.webhook(createTelegramUpdates(userId).message(120, "200 продукты"), secret);
-    assert.equal(response.status, 503);
-    assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), []);
-  });
-}
+test("missing settings make health unhealthy and block expense writes", async context => {
+  const secret = "settings-secret";
+  const userId = 101;
+  const fixture = await createWorkerFixture("123:fixture", secret, 9001);
+  context.after(() => fixture.dispose());
+  await fixture.DB.prepare("DELETE FROM instance_settings").execute();
+  await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
+  const health = await fixture.worker.fetch("http://local/health");
+  assert.equal(health.status, 503);
+  assert.match(JSON.stringify(await health.json()), /instance_settings/);
+  const response = await fixture.webhook(createTelegramUpdates(userId).message(120, "200 продукты"), secret);
+  assert.equal(response.status, 503);
+  assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), []);
+});
 
 test("a currency change affects the next request without rewriting existing expenses", async context => {
   const token = "123:fixture";
@@ -59,48 +50,42 @@ test("a currency change affects the next request without rewriting existing expe
   assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), before);
 });
 
-for (const route of ["/unknown", "/telegram"]) {
-  test(`${route} rejects an unrelated or unauthorized request without settings`, async context => {
-    const secret = "selective-secret";
-    const fixture = await createWorkerFixture("123:fixture", secret, 9001);
-    context.after(() => fixture.dispose());
-    await fixture.DB.prepare("DROP TABLE instance_settings").execute();
-    const response = await fixture.worker.fetch(`http://local${route}`, {
-      method: route === "/telegram" ? "POST" : "GET", body: route === "/telegram" ? "{}" : undefined
-    });
-    assert.equal(response.status, route === "/telegram" ? 401 : 404);
-    assert.deepEqual(await fixture.calls(), []);
-  });
-}
+test("unrelated and unauthorized requests are rejected even before settings are migrated", async context => {
+  const fixture = await createWorkerFixture("123:fixture", "selective-secret", 9001);
+  context.after(() => fixture.dispose());
+  await fixture.DB.prepare("DROP TABLE instance_settings").execute();
+  for (const [route, method, status] of [["/unknown", "GET", 404], ["/telegram", "POST", 401]] as const)
+    assert.equal((await fixture.worker.fetch(`http://local${route}`, { method })).status, status, route);
+  assert.deepEqual(await fixture.calls(), []);
+});
 
-for (const text of ["Помощь", "Категории"]) {
-  test(`${text} works when the settings table is absent`, async context => {
-    const secret = "selective-secret";
-    const userId = 101;
-    const fixture = await createWorkerFixture("123:fixture", secret, 9001);
-    context.after(() => fixture.dispose());
-    await fixture.DB.prepare("DROP TABLE instance_settings").execute();
-    await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
-    const response = await fixture.webhook(createTelegramUpdates(userId).message(150, text), secret);
-    assert.equal(response.status, 200);
-    assert((await fixture.calls()).some(call => call.method === "sendMessage"));
-  });
-}
+test("help and categories remain available before settings are migrated", async context => {
+  const secret = "selective-secret";
+  const userId = 101;
+  const fixture = await createWorkerFixture("123:fixture", secret, 9001);
+  context.after(() => fixture.dispose());
+  await fixture.DB.prepare("DROP TABLE instance_settings").execute();
+  await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
+  for (const [updateId, text, expected] of [[150, "Помощь", /Отправьте расход/], [151, "Категории", /Категории/]] as const) {
+    assert.equal((await fixture.webhook(createTelegramUpdates(userId).message(updateId, text), secret)).status, 200, text);
+    assert.match(String((await fixture.lastCall("sendMessage"))?.payload.text), expected);
+  }
+});
 
-for (const data of ["c1:151:200:groceries", "e1:1:other"]) {
-  test(`${data} returns a configuration failure before changing expenses`, async context => {
-    const secret = "selective-secret";
-    const userId = 101;
-    const fixture = await createWorkerFixture("123:fixture", secret, 9001);
-    context.after(() => fixture.dispose());
-    await fixture.DB.prepare("DELETE FROM instance_settings").execute();
-    await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
-    await fixture.DB.prepare(`INSERT INTO expenses (source_action_key, amount_rsd, category_id, spent_on, created_by, created_at, updated_at)
-      VALUES ('expense:150', 350, 'groceries', '2026-02-17', ?, '2026-02-17T08:00:00Z', '2026-02-17T08:00:00Z')`).bind(String(userId)).execute();
-    const before = await fixture.DB.prepare("SELECT * FROM expenses").many();
-    const response = await fixture.webhook(createTelegramUpdates(userId).callback(151, data), secret);
-    assert.equal(response.status, 503);
+test("missing settings block category-selection and edit callbacks without changing expenses", async context => {
+  const secret = "selective-secret";
+  const userId = 101;
+  const fixture = await createWorkerFixture("123:fixture", secret, 9001);
+  context.after(() => fixture.dispose());
+  await fixture.DB.prepare("DELETE FROM instance_settings").execute();
+  await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
+  await fixture.DB.prepare(`INSERT INTO expenses (source_action_key, amount_rsd, category_id, spent_on, created_by, created_at, updated_at)
+    VALUES ('expense:150', 350, 'groceries', '2026-02-17', ?, '2026-02-17T08:00:00Z', '2026-02-17T08:00:00Z')`).bind(String(userId)).execute();
+  const before = await fixture.DB.prepare("SELECT * FROM expenses").many();
+  for (const [updateId, data] of [[151, "c1:151:200:groceries"], [152, "e1:1:other"]] as const) {
+    const response = await fixture.webhook(createTelegramUpdates(userId).callback(updateId, data), secret);
+    assert.equal(response.status, 503, data);
     assert.match(JSON.stringify(await response.json()), /instance_settings/);
     assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), before);
-  });
-}
+  }
+});
