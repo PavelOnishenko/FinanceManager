@@ -3,7 +3,7 @@ import test from "node:test";
 import { createEditPrompt, parseEditPrompt } from "../src/domain/editPrompt";
 
 test("creates an amount edit prompt", () => {
-  assert.equal(createEditPrompt({ expenseId: 123, field: "amount" }), "Редактирование расхода №123 · Новая сумма\n\nОтправьте целую сумму в RSD.");
+  assert.equal(createEditPrompt({ expenseId: 123, field: "amount" }, "RSD"), "Редактирование расхода №123 · Новая сумма\n\nОтправьте целую сумму в RSD.");
 });
 
 test("parses an edit prompt", () => {
@@ -12,13 +12,13 @@ test("parses an edit prompt", () => {
 });
 
 test("recovers an edit target from a ForceReply prompt", () => {
-  const prompt = createEditPrompt({ expenseId: 123, field: "amount" });
+  const prompt = createEditPrompt({ expenseId: 123, field: "amount" }, "RSD");
   assert.deepEqual(parseEditPrompt(prompt), { expenseId: 123, field: "amount" });
 });
 
 test("supports every text edit field", () => {
   for (const field of ["amount", "date", "comment"] as const) {
-    const prompt = createEditPrompt({ expenseId: 7, field });
+    const prompt = createEditPrompt({ expenseId: 7, field }, "RSD");
     assert.deepEqual(parseEditPrompt(prompt), { expenseId: 7, field });
   }
 });
@@ -26,4 +26,16 @@ test("supports every text edit field", () => {
 test("rejects unrelated or malformed prompts", () => {
   assert.equal(parseEditPrompt("Введите новую сумму"), undefined);
   assert.equal(parseEditPrompt("Редактирование расхода №0 · Новая сумма"), undefined);
+});
+
+test("amount prompts use the selected currency", () => {
+  const displayCurrency = "EUR";
+  const expenseId = 123;
+  assert.equal(createEditPrompt({ expenseId, field: "amount" }, displayCurrency),
+    `Редактирование расхода №${expenseId} · Новая сумма\n\nОтправьте целую сумму в ${displayCurrency}.`);
+});
+
+test("amount prompts require an explicit currency", () => {
+  const expenseId = 123;
+  assert.throws(() => createEditPrompt({ expenseId, field: "amount" }), /currency is required/);
 });

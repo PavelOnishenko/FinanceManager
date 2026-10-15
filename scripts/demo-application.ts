@@ -1,3 +1,4 @@
+import { readInstanceSettings } from "../src/config/instanceSettings";
 import 
 { 
   ApplicationResultKind, 
@@ -16,21 +17,22 @@ try {
   const expenseTime = new Date("2026-09-18T10:00:00.000Z");
   const reportTime = new Date("2026-10-05T10:00:00.000Z");
   await localD1.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(telegramUserId, "Тестовый участник").execute();
+  const settings = await readInstanceSettings(localD1.DB);
   const repository = new D1FinanceRepository(localD1.DB);
   const direct = await processExpenseMessage(repository, {
     telegramUserId, sourceUpdateId: 1001, text: "2490 продукты Lidl", currentTime: expenseTime
-  });
+  }, settings);
   const selection = await processExpenseMessage(repository, {
     telegramUserId, sourceUpdateId: 1002, text: "700", currentTime: expenseTime
-  });
+  }, settings);
   const selected = await createExpenseAfterCategorySelection(repository, {
     telegramUserId, sourceUpdateId: 1002, amountRsd: 700, categoryId: "transport", currentTime: expenseTime
-  });
+  }, settings);
   const duplicate = await createExpenseAfterCategorySelection(repository, {
     telegramUserId, sourceUpdateId: 1002, amountRsd: 700, categoryId: "groceries", currentTime: expenseTime
-  });
+  }, settings);
   const history = await getExpenseHistory(repository, telegramUserId);
-  const statistics = await getPreviousMonthStatistics(repository, telegramUserId, reportTime);
+  const statistics = await getPreviousMonthStatistics(repository, telegramUserId, reportTime, settings.financeTimeZone);
   console.log(JSON.stringify({
     directCreated: direct.kind === ApplicationResultKind.ExpenseSaved && direct.created,
     offeredCategories: selection.kind === ApplicationResultKind.CategorySelection ? selection.categories.length : 0,

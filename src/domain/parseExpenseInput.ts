@@ -6,7 +6,7 @@ export type ParsedExpenseInput =
   | { kind: "expense"; amountRsd: number; categoryId: CategoryId; comment?: string }
   | { kind: "invalid"; message: string };
 
-export function parseExpenseInput(input: string, activeCategories: readonly CategoryOption[]): ParsedExpenseInput {
+export function parseExpenseInput(input: string, activeCategories: readonly CategoryOption[], displayCurrency: string): ParsedExpenseInput {
   const normalizedInput = input.trim().replace(/\s+/g, " ");
   if (!normalizedInput) return { kind: "invalid", message: "Введите сумму расхода." };
 
@@ -19,7 +19,8 @@ export function parseExpenseInput(input: string, activeCategories: readonly Cate
       continue;
 
     const parsedAmount = parseRsdAmount(match[1] ?? "");
-    if (parsedAmount === undefined) return invalidAmount();
+    if (parsedAmount === undefined)
+      return invalidAmount(displayCurrency);
 
     const comment = match[2]?.trim();
     return { kind: "expense", amountRsd: parsedAmount, categoryId: id, ...(comment ? { comment } : {}) };
@@ -35,6 +36,6 @@ function parseRsdAmount(value: string): number | undefined {
   return Number.isSafeInteger(amount) && amount > 0 ? amount : undefined;
 }
 
-function invalidAmount(): ParsedExpenseInput {
-  return { kind: "invalid", message: "Сумма должна быть целым положительным числом в RSD." };
+function invalidAmount(displayCurrency: string): ParsedExpenseInput {
+  return { kind: "invalid", message: `Сумма должна быть целым положительным числом в ${displayCurrency}.` };
 }

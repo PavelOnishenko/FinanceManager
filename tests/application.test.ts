@@ -1,3 +1,5 @@
+import { createSettings } from "./createSettings";
+import { readInstanceSettings } from "../src/config/instanceSettings";
 import { expectRepositorySuccess } from "./repositoryAssertions";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -50,7 +52,7 @@ test("creates an expense from a full message with the Belgrade local date", asyn
     await seedMember(context.DB, telegramUserId, "Анна", 1);
     const result = await processExpenseMessage(context.repository, {
       telegramUserId, sourceUpdateId, text: "2490 продукты Lidl", currentTime
-    });
+    }, createSettings({ financeTimeZone: "Europe/Belgrade" }));
     assert(result.kind === ApplicationResultKind.ExpenseSaved);
     assert.equal(result.created, true);
     assert.equal(result.expense.sourceActionKey, `expense:${sourceUpdateId}`);
@@ -73,7 +75,7 @@ test("prepares every category after an amount-only message without creating a dr
     await seedMember(context.DB, telegramUserId, "Анна", 1);
     const result = await processExpenseMessage(context.repository, {
       telegramUserId, sourceUpdateId, text: amountRsd.toString(), currentTime: new Date("2026-09-18T10:00:00.000Z")
-    });
+    }, createSettings());
     assert.deepEqual(result, {
       kind: ApplicationResultKind.CategorySelection, sourceUpdateId, amountRsd,
       categories: categories.map(({ id, name }) => ({ id, name }))
@@ -94,10 +96,10 @@ test("creates only one expense when category selection is delivered twice", asyn
     await seedMember(context.DB, telegramUserId, "Анна", 1);
     const first = await createExpenseAfterCategorySelection(context.repository, {
       telegramUserId, sourceUpdateId, amountRsd, categoryId: "transport", currentTime
-    });
+    }, createSettings());
     const duplicate = await createExpenseAfterCategorySelection(context.repository, {
       telegramUserId, sourceUpdateId, amountRsd, categoryId: "groceries", currentTime
-    });
+    }, createSettings());
     assert(first.kind === ApplicationResultKind.ExpenseSaved);
     assert(duplicate.kind === ApplicationResultKind.ExpenseSaved);
     assert.equal(first.created, true);
@@ -119,7 +121,7 @@ test("returns shared history and expense details to another enabled member", asy
     await seedMember(context.DB, viewerId, "Борис", 1);
     const saved = await processExpenseMessage(context.repository, {
       telegramUserId: authorId, sourceUpdateId: 7100, text: "800 рестораны Ужин", currentTime: new Date("2026-09-18T10:00:00.000Z")
-    });
+    }, createSettings());
     assert(saved.kind === ApplicationResultKind.ExpenseSaved);
     const history = await getExpenseHistory(context.repository, viewerId);
     const details = await getExpenseDetails(context.repository, viewerId, saved.expense.id);
@@ -140,13 +142,13 @@ test("edits every mutable field and deletes a shared expense", async () => {
     await seedMember(context.DB, editorId, "Борис", 1);
     const saved = await processExpenseMessage(context.repository, {
       telegramUserId: authorId, sourceUpdateId: 8100, text: "1200 продукты Старое", currentTime: new Date("2026-09-18T10:00:00.000Z")
-    });
+    }, createSettings());
     assert(saved.kind === ApplicationResultKind.ExpenseSaved);
     const expenseId = saved.expense.id;
-    await editExpense(context.repository, editorId, expenseId, { field: "amount", amountRsd: 2400 });
-    await editExpense(context.repository, editorId, expenseId, { field: "category", categoryId: "transport" });
-    await editExpense(context.repository, editorId, expenseId, { field: "date", spentOn: "2026-09-16" });
-    const edited = await editExpense(context.repository, editorId, expenseId, { field: "comment", comment: "Такси" });
+    await editExpense(context.repository, editorId, expenseId, { field: "amount", amountRsd: 2400 }, "RSD");
+    await editExpense(context.repository, editorId, expenseId, { field: "category", categoryId: "transport" }, "RSD");
+    await editExpense(context.repository, editorId, expenseId, { field: "date", spentOn: "2026-09-16" }, "RSD");
+    const edited = await editExpense(context.repository, editorId, expenseId, { field: "comment", comment: "Такси" }, "RSD");
     assert(edited.kind === ApplicationResultKind.ExpenseUpdated);
     assert.equal(edited.expense.amountRsd, 2400);
     assert.equal(edited.expense.categoryId, "transport");
@@ -175,7 +177,7 @@ test("calculates the previous Belgrade calendar month", async () => {
     expectRepositorySuccess(await context.repository.createExpense({
       sourceActionKey: "current", amountRsd: 9000, categoryId: "other", spentOn: "2026-03-01", createdBy: telegramUserId
     }));
-    const result = await getPreviousMonthStatistics(context.repository, telegramUserId, new Date("2026-03-15T12:00:00.000Z"));
+    const result = await getPreviousMonthStatistics(context.repository, telegramUserId, new Date("2026-03-15T12:00:00.000Z"), "Europe/Belgrade");
     assert.deepEqual(result, {
       kind: ApplicationResultKind.ExpenseStatistics, range: { fromDate: "2026-02-01", toDate: "2026-02-28" },
       statistics: {
@@ -214,9 +216,9 @@ test("uses inclusive custom date ranges and rejects invalid calendar ranges", as
 
 // todo move time tests to diff suite?
 test("handles Belgrade dates and leap-year month boundaries", () => {
-  assert.equal(getDateInFinanceTimeZone(new Date("2026-01-01T00:30:00.000Z")), "2026-01-01");
-  assert.deepEqual(getPreviousCalendarMonthRange(new Date("2026-01-15T12:00:00.000Z")), { fromDate: "2025-12-01", toDate: "2025-12-31" });
-  assert.deepEqual(getPreviousCalendarMonthRange(new Date("2024-03-15T12:00:00.000Z")), { fromDate: "2024-02-01", toDate: "2024-02-29" });
+  assert.equal(getDateInFinanceTimeZone(new Date("2026-01-01T00:30:00.000Z"), "Europe/Belgrade"), "2026-01-01");
+  assert.deepEqual(getPreviousCalendarMonthRange(new Date("2026-01-15T12:00:00.000Z"), "Europe/Belgrade"), { fromDate: "2025-12-01", toDate: "2025-12-31" });
+  assert.deepEqual(getPreviousCalendarMonthRange(new Date("2024-03-15T12:00:00.000Z"), "Europe/Belgrade"), { fromDate: "2024-02-01", toDate: "2024-02-29" });
   assert.equal(isValidCalendarDate("2024-02-29"), true);
   assert.equal(isValidCalendarDate("2026-02-29"), false);
 });
@@ -228,4 +230,73 @@ test("statistics month navigation stops at 2026", () => {
   assert.equal(shiftCalendarMonth("2026-01", -1), undefined);
   assert.equal(shiftCalendarMonth("2025-12", 1), undefined);
   assert.equal(shiftCalendarMonth("2026-01", 1), "2026-02");
+});
+
+for (const entry of ["full-text", "category-button"]) {
+  test(`configured timezone assigns the creation-action date for ${entry}`, async context => {
+    const memberId = "zone-member";
+    const displayCurrency = "EUR";
+    const financeTimeZone = "America/New_York";
+    const currentTime = new Date("2026-03-01T00:30:00Z");
+    const amountRsd = 2490;
+    const sourceUpdateId = 9900;
+    const database = await createApplicationTestContext();
+    context.after(() => database.dispose());
+    await seedMember(database.DB, memberId, "Анна", 1);
+    let result;
+    if (entry === "full-text")
+      result = await processExpenseMessage(database.repository, {
+        telegramUserId: memberId, sourceUpdateId, text: `${amountRsd} продукты`, currentTime
+      }, createSettings({ displayCurrency, financeTimeZone }));
+    else
+      result = await createExpenseAfterCategorySelection(database.repository, {
+        telegramUserId: memberId, sourceUpdateId, amountRsd, categoryId: "groceries", currentTime
+      }, createSettings({ displayCurrency, financeTimeZone }));
+    assert.equal(result.kind, ApplicationResultKind.ExpenseSaved);
+    if (result.kind !== ApplicationResultKind.ExpenseSaved)
+      throw new Error("Expected saved expense");
+    assert.equal(result.expense.spentOn, "2026-02-28");
+    assert.equal(result.expense.amountRsd, amountRsd);
+    assert.equal(result.expense.sourceActionKey, `expense:${sourceUpdateId}`);
+  });
+}
+
+test("configured previous-month statistics use local boundaries", async context => {
+  const memberId = "zone-statistics";
+  const financeTimeZone = "America/New_York";
+  const amountRsd = 370;
+  const spentOn = "2026-01-31";
+  const database = await createApplicationTestContext();
+  context.after(() => database.dispose());
+  await seedMember(database.DB, memberId, "Анна", 1);
+  expectRepositorySuccess(await database.repository.createExpense({
+    sourceActionKey: "expense:9901", amountRsd, categoryId: "groceries", spentOn, createdBy: memberId
+  }));
+  const result = await getPreviousMonthStatistics(database.repository, memberId, new Date("2026-03-01T00:30:00Z"), financeTimeZone);
+  assert.equal(result.kind, ApplicationResultKind.ExpenseStatistics);
+  assert.deepEqual(result.range, { fromDate: "2026-01-01", toDate: spentOn });
+  assert.equal(result.statistics.totalRsd, amountRsd);
+});
+
+test("a timezone change dates future expenses without changing historical rows", async context => {
+  const memberId = "zone-change";
+  const currentTime = new Date("2026-03-01T00:30:00Z");
+  const amountRsd = 470;
+  const database = await createApplicationTestContext();
+  context.after(() => database.dispose());
+  await seedMember(database.DB, memberId, "Анна", 1);
+  await database.DB.prepare("UPDATE instance_settings SET display_currency = ?, finance_time_zone = ? WHERE id = 1").bind("EUR", "Europe/Belgrade").execute();
+  const initial = await processExpenseMessage(database.repository, {
+    telegramUserId: memberId, sourceUpdateId: 9800, text: `${amountRsd} продукты`, currentTime
+  }, await readInstanceSettings(database.DB));
+  assert.equal(initial.kind, ApplicationResultKind.ExpenseSaved);
+  assert.equal(initial.expense.spentOn, "2026-03-01");
+  await database.DB.prepare("UPDATE instance_settings SET finance_time_zone = ? WHERE id = 1").bind("America/New_York").execute();
+  const next = await processExpenseMessage(database.repository, {
+    telegramUserId: memberId, sourceUpdateId: 9801, text: `${amountRsd} продукты`, currentTime
+  }, await readInstanceSettings(database.DB));
+  assert.equal(next.kind, ApplicationResultKind.ExpenseSaved);
+  assert.equal(next.expense.spentOn, "2026-02-28");
+  assert.equal(next.expense.amountRsd, amountRsd);
+  assert.deepEqual(await database.repository.getExpenseById(initial.expense.id), initial.expense);
 });

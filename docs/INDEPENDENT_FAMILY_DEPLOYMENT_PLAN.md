@@ -1,7 +1,7 @@
 # Independent family deployment: implementation plan
 
 Status: P0 implemented and locally verified on October 11, 2026. P1 fully completed:
-the owner confirmed live verification in demo and production on October 13, 2026. P2/P3 and installer phases are proposed, not implemented.
+the owner confirmed live verification in demo and production on October 13, 2026. P2/P3 bot-side support is implemented and locally tested; remote migration/deployment and installer phases remain pending.
 The subsequent P1 repository-result refactor passed 83/83 tests on October 12, 2026. After removing nested ternaries,
 three focused tests, the type check, and the dry-run build passed. Local tests/check/build are authorized;
 commands accessing remote resources require an explicit owner decision.
@@ -98,7 +98,7 @@ Recheck these files before implementing; code takes precedence over this snapsho
 Do not copy either existing Cloudflare database ID into a customer package.
 Do not add the new family to the developer's production database: all enabled members of that database share its expenses.
 Do not modify existing production/demo configuration to make the installer work. Their new required currency and timezone
-values are a separate product migration and must be inserted explicitly into each database before deploying the Worker that requires them.
+values are seeded by product migration `0005`; apply it to each database before deploying the Worker that requires them.
 Preserve existing documentation, examples, commands, and user-authored task lists.
 
 The existing local D1 helper applies SQL directly. It does not prove Wrangler migration history or production update behavior.
@@ -234,24 +234,48 @@ along with type check and dry-run build. Existing expense/category rows are unch
 
 ### Task P2: Make the displayed currency configurable
 
-- [ ] Define a required `display_currency` value in the single D1 settings row and validate a nonempty, supported label.
+Bot-side implementation is complete. See [the settings contract](INSTANCE_SETTINGS.md) for supported labels,
+migration-seeded initial settings and the installer setup/change protocol. The owner still applies migrations
+and deploys; installer controls remain in Tasks 4 and 6.
+
+- [x] Define a required `display_currency` value in the single D1 settings row and validate a nonempty, supported label.
   Missing or invalid values must cause an explicit configuration failure, never imply `RSD`.
-  Configure `RSD` explicitly for the existing production/demo databases before deploying this Worker version.
-- [ ] Replace user-visible hard-coded `RSD` in expense confirmation, history, details, editing prompts/errors,
+  Migration `0005` seeds `RSD` in D1; the Worker never substitutes it when the value is missing or invalid.
+- [x] Replace user-visible hard-coded `RSD` in expense confirmation, history, details, editing prompts/errors,
   category-selection prompts, and statistics with this setting. Keep amount validation and integer arithmetic unchanged.
-- [ ] Load the setting from D1 at the start of each request in `src/index.ts` and pass it through the Telegram/application
-  boundaries that render text. Do not cache it without a tested invalidation strategy, use global mutable state,
+- [x] Create a request-local settings loader in `src/index.ts`; read and validate settings only when an operation needs
+  currency or timezone, and pass the values through the Telegram/application boundaries that use them. Do not cache it without a tested invalidation strategy, use global mutable state,
   store the label on every expense, or add exchange-rate logic.
-- [ ] Keep the current `amount_rsd` database column and its values unchanged in this release.
+- [x] Keep the current `amount_rsd` database column and its values unchanged in this release.
   Treat it as a legacy field name; renaming it would require a separate compatibility migration and is unnecessary for a text change.
-- [ ] Define the installer contract: choose a short validated label during setup and change it later by updating the
+- [x] Define the installer contract: choose a short validated label during setup and change it later by updating the
   customer's D1 settings row. Read the current value from D1 before showing a change; do not keep an authoritative
   local or Worker-configuration copy. Explain that old amounts keep the same number and receive the new label.
   If a write times out, read D1 again before reporting whether the old or new label is in effect.
   Implement the actual wizard controls in installer Tasks 4 and 6.
-- [ ] Add tests using a label other than `RSD` and verify all bot money text changes while stored amounts,
+- [x] Add tests using a label other than `RSD` and verify all bot money text changes while stored amounts,
   statistics totals/percentages, editing, source action keys, and expense dates remain numerically identical.
   Verify missing/invalid settings fail visibly and test a later label change with existing expenses.
+
+Local verification (October 13, 2026): TDD reproduced failing currency prompts, timezone boundaries,
+and request-level configuration handling before implementation. The full regression suite passed 138/138 tests;
+subsequent focused checks also passed for duplicate/absent settings tables, a timezone change, DST evenings,
+and non-RSD totals/percentages. Type check and Worker dry-run build passed. Both fresh-D1 and local Wrangler
+upgrade tests passed; no remote D1 operations or Worker deployment were performed.
+
+Selective settings loading (October 14, 2026): unknown routes and invalid webhook secrets no longer read settings.
+Telegram loads settings only when an operation uses currency or timezone; health always validates them.
+A lazy loader reuses its promise only within the current request. Configuration errors propagate from both
+message and callback handlers as HTTP 503 before dependent expense writes. Help, category management,
+expense deletion, explicit calendar navigation, date/comment prompts, and empty history work without settings.
+TDD reproduced the previous failures; 165/165 full tests, type check, and dry-run build passed.
+No remote D1 operations or Worker deployment were performed.
+
+Initial settings seed (October 14, 2026): migration `0005` now inserts `RSD` and `Europe/Belgrade`.
+Fresh and populated local databases receive the row; reapplying Wrangler migrations preserves customer-selected values.
+Worker validation and selective loading are unchanged. Missing-row tests explicitly delete the seeded row.
+TDD reproduced the empty-table behavior before the change; 166/166 full tests, type check, dry-run build,
+and the local application example passed. No remote D1 operations or Worker deployment were performed.
 
 Bot-side acceptance before installer work: a test D1 with another display label consistently
 renders it for old and new expenses without changing any stored amount or calculation. Final acceptance includes
@@ -259,24 +283,27 @@ choosing and changing the label through the installer during the separate-accoun
 
 ### Task P3: Make the finance timezone configurable
 
-- [ ] Define a required `finance_time_zone` value in the same D1 settings row. Accept only a valid IANA timezone identifier
+Bot-side support is implemented with P2 because this plan requires them to share a migration and ship together.
+Remote migration/deployment and installer controls remain pending. See [the settings contract](INSTANCE_SETTINGS.md).
+
+- [x] Define a required `finance_time_zone` value in the same D1 settings row. Accept only a valid IANA timezone identifier
   supported by the Worker runtime; missing, invalid, or unsupported values must fail visibly, never imply `Europe/Belgrade`.
-  Configure `Europe/Belgrade` explicitly for the existing production/demo databases before deploying this Worker version.
-- [ ] Replace the hard-coded timezone in `src/application/dateRange.ts` with the validated value read from D1 and passed
+  Migration `0005` seeds `Europe/Belgrade` in D1; the Worker never substitutes it when the value is missing or invalid.
+- [x] Replace the hard-coded timezone in `src/application/dateRange.ts` with the validated value read from D1 and passed
   through the Telegram/application calls that need the current local date. Avoid process-global mutable state.
-- [ ] Use the selected timezone when assigning `spent_on` to a newly created expense, including both full-text entry and
+- [x] Use the selected timezone when assigning `spent_on` to a newly created expense, including both full-text entry and
   amount-plus-category selection. Use the time of the actual creation action; do not reinterpret a prior message's timestamp.
-- [ ] Use it for current date/month/year decisions in time-relative actions, especially previous-month statistics and
+- [x] Use it for current date/month/year decisions in time-relative actions, especially previous-month statistics and
   the calendar month initially shown from that action. Preserve the fixed `firstStatisticsYear = 2026` history floor:
   it is a product rule, not a timezone-dependent current year.
-- [ ] Keep explicitly entered dates and existing `expenses.spent_on` values exactly as stored. Do not run a D1 data migration,
+- [x] Keep explicitly entered dates and existing `expenses.spent_on` values exactly as stored. Do not run a D1 data migration,
   backfill, UTC conversion, or recomputation when the selected timezone changes. Do not alter existing UTC creation/update timestamps.
-- [ ] Define the installer contract: choose the timezone at setup, show the current and proposed zones when changing it,
+- [x] Define the installer contract: choose the timezone at setup, show the current and proposed zones when changing it,
   and explain that newly added expenses and relative-period boundaries may change while historical dates stay fixed.
   Update only the D1 settings row; verify the committed value by reading it back. If the write result is unknown, reconcile
   against D1 before reporting success or failure. No Worker redeployment is needed for a settings-only change.
   Implement the actual wizard controls in installer Tasks 4 and 6.
-- [ ] Test different zones at the same instant near day, month, and year boundaries, plus daylight-saving transitions.
+- [x] Test different zones at the same instant near day, month, and year boundaries, plus daylight-saving transitions.
   Verify the new expense date and previous-month range use the selected zone, and changing zones leaves existing expense
   rows, explicit dates, amounts, and UTC timestamps untouched. Verify missing/invalid settings fail visibly.
 
@@ -285,15 +312,23 @@ previous-month range in two configured zones, without changing stored historical
 choosing and changing the zone through the installer during the separate-account rehearsal.
 
 P2 and P3 share one new numbered migration: create `instance_settings` with an integer primary key constrained to `id = 1`,
-`display_currency TEXT NOT NULL`, and `finance_time_zone TEXT NOT NULL`, with no SQL defaults. The migration creates
-the table but does not silently choose values. The installer inserts the row after migrations and before deploying
-the Worker/registering the webhook. For existing production/demo databases, explicitly insert their current `RSD`
-and `Europe/Belgrade` values before deploying the Worker that requires the row. Preserve the old migration files.
+`display_currency TEXT NOT NULL`, and `finance_time_zone TEXT NOT NULL`, with no SQL `DEFAULT` clauses.
+Migration `0005` creates the table and inserts `id = 1`, `RSD`, and `Europe/Belgrade` as initial values.
+For existing production/demo instances, applying this migration preserves their current behavior without separate SQL.
+During setup, the installer reads the seeded row, shows the current values for owner confirmation or change, and updates
+that row before deploying the Worker/registering the webhook. Migration history prevents reseeding on updates;
+never overwrite customer-selected values. Preserve migrations `0001`–`0004`. If the earlier unseeded revision of `0005`
+was already applied, editing its file will not initialize that database; see [the settings contract](INSTANCE_SETTINGS.md).
 
-Read and validate the one settings row for each Worker request, including `/health`, before handling Telegram updates
-or reporting the Worker as healthy. Missing, duplicate, or invalid settings must make health unhealthy and Telegram
-requests fail without creating expenses; log the setting name and reason without logging secrets. Local and deployment
-test fixtures must insert both values explicitly. Neither the Worker nor installer may use hard-coded or package defaults.
+Always read and validate the settings row for `/health`. For Telegram, read settings only when the action needs currency
+or timezone, before any dependent expense write. Unknown routes, invalid webhook secrets, access denials, help, category
+management, expense deletion, explicit calendar navigation, and date/comment prompts do not read settings. An empty history
+or a missing expense can also be reported without settings. Use at most one settings read per request, reusing its result
+within that request only. Missing, duplicate, or invalid settings make health unhealthy and dependent Telegram operations
+return HTTP 503 without changing expenses; log the setting name and reason without logging secrets. Local and deployment
+test fixtures use the migration seed or explicitly update it for their scenario. Missing-setting tests delete the row.
+The Worker must never fall back to initial values. The installer reads D1 as authoritative and requires confirmation
+or a change of the initial choices before first use.
 Test the migration on fresh and populated D1 databases, reject a second settings row, and verify that a settings update
 changes the next Worker response without changing expense rows or deploying a new Worker.
 
@@ -484,13 +519,14 @@ Acceptance: fake-provider tests demonstrate wrong-account rejection, safe retry,
 ### Task 4: Implement fresh installation and participant enrollment
 
 - [ ] Verify the bot with Telegram `getMe`, show its ID/username for owner confirmation, and do not persist either locally.
-- [ ] Require the owner to select and validate the initial currency label and finance timezone before creating resources.
+- [ ] Require the owner to confirm or change and validate the initial currency label and finance timezone during setup.
   Block installation while either value is absent or invalid.
 - [ ] Check `getWebhookInfo`. If another webhook already owns the bot, stop and explain the conflict; do not silently replace it.
 - [ ] Create the D1 database and generate a dedicated instance configuration with an explicit `account_id` and `DB` binding.
 - [ ] Apply all release migrations with Wrangler's migration system and verify no pending migrations remain.
-- [ ] Insert the single settings row with the owner's chosen values using parameter-bound SQL; verify it by reading it back.
-  On retry, read the existing row and keep its values; do not overwrite it with package or earlier form values.
+- [ ] Read the settings row seeded by migration `0005` and show its current values. Require owner confirmation or change;
+  update the row with the chosen values using parameter-bound SQL and verify it by reading it back.
+  On retry, read the existing row and keep its values; do not overwrite it with migration seeds or earlier form values.
 - [ ] Verify a clean baseline: the expected default categories and normalized names, selected display currency and finance timezone,
   zero members, and zero expenses. Derive expected counts from release fixtures rather than fixing 19 forever.
 - [ ] Deploy the bundled Worker without registering a webhook yet, so the named Worker exists before setting secrets.
@@ -741,7 +777,7 @@ Stay on Free unless measurements justify an explicit owner-approved upgrade. Rec
 - [ ] The selected display currency survives an update.
 - [ ] The installer selects and later changes the finance timezone; existing stored expense dates and UTC timestamps remain unchanged.
 - [ ] New expense dates and relative-period boundaries follow the selected zone; that zone survives an update.
-- [ ] Both settings live in one D1 row in existing and new databases; missing/invalid values fail health and block writes.
+- [ ] Both settings live in one D1 row in existing and new databases; missing/invalid values fail health and block settings-dependent expense writes.
 - [ ] Settings changes take effect without Worker deployment.
 - [ ] A clean Windows x64 environment can run the delivered package without developer tools or manual commands.
 - [ ] The owner creates a bot and authorizes Cloudflare; all resource setup happens through the wizard.
