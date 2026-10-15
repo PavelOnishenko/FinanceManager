@@ -3,6 +3,12 @@ import test from "node:test";
 import { createMigratedLocalD1 } from "../scripts/createLocalD1";
 import { createInstanceSettingsLoader, readInstanceSettings, validateInstanceSettings } from "../src/config/instanceSettings";
 
+test("migrations seed readable default currency and timezone settings", async context => {
+  const database = await createMigratedLocalD1("settings-defaults");
+  context.after(() => database.dispose());
+  assert.deepEqual(await readInstanceSettings(database.DB), { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+});
+
 test("reads a supported currency and timezone from D1", async context => {
   const displayCurrency = "EUR";
   const financeTimeZone = "America/New_York";
