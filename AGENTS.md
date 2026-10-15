@@ -10,6 +10,10 @@
 
 ## Tests
 
+- Use `assert` for test expectations whenever possible, including checks that narrow a result's type.
+  Prefer `assert(initial.kind === ApplicationResultKind.ExpenseSaved)` over an `if` that throws `new Error("Expected saved expense")`.
+  Keep explicit throws when they simulate a failure under test rather than express an expectation.
+
 - Follow the rule "one aspect of functionality — one test". Split tests that cover independent behaviors instead of building long scenarios.
   Do not combine unrelated checks to reduce execution time; optimize test infrastructure later if needed. Longer local test runs are acceptable.
 - Keep every test-created value that is asserted or drives the behavior under test inside that test, either inline or in a local variable.
