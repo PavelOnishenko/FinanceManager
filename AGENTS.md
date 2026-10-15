@@ -14,8 +14,18 @@
   Prefer `assert(initial.kind === ApplicationResultKind.ExpenseSaved)` over an `if` that throws `new Error("Expected saved expense")`.
   Keep explicit throws when they simulate a failure under test rather than express an expectation.
 
-- Follow the rule "one aspect of functionality — one test". Split tests that cover independent behaviors instead of building long scenarios.
-  Do not combine unrelated checks to reduce execution time; optimize test infrastructure later if needed. Longer local test runs are acceptable.
+- Match test scope to the complexity of the change and realistic risks. Do not aim to maximize the number of tests or assertions.
+- Each new test should verify a distinct behavior or catch a specific bug. Do not duplicate behavior already reliably covered by another test
+  without a separate reason.
+- Test a rule at the simplest suitable level. At higher levels, test only what those layers add, such as passing settings, handling errors,
+  or formatting a response; do not repeat the same checks at every layer.
+- Test observable behavior. Do not assert internal calls, their count, or their order unless those details are themselves a requirement.
+- Assert properties relevant to the scenario's purpose. Do not check every unchanged field just in case.
+- Use the simplest sufficient test infrastructure. Start a Worker, temporary database, or Wrangler only when the behavior requires that level.
+- For behavior-preserving refactors, use existing tests first. Do not add tests that merely mirror the implementation of a new helper.
+- Follow the rule "one aspect of functionality — one test". Multiple assertions about the results of one action are appropriate when they
+  establish the same behavior, such as a changed amount and its confirmation. Do not turn every assertion into a separate test.
+  Split independent behaviors instead of building long scenarios, and do not combine unrelated checks just to reduce execution time.
 - Keep every test-created value that is asserted or drives the behavior under test inside that test, either inline or in a local variable.
   Helpers may provide only irrelevant boilerplate defaults; do not hide expected fixture values in factories or default arguments.
   Canonical application data supplied by production migrations or configuration is part of the system under test and does not need to be recreated inside the test.
