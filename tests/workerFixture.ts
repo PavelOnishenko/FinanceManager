@@ -1,7 +1,10 @@
+import type { Update } from "grammy/types";
 import { readdir, readFile } from "node:fs/promises";
 import { build } from "esbuild";
 import { Miniflare } from "miniflare";
 import { CloudflareD1Database, type CloudflareD1Binding } from "../src/storage/CloudflareD1Database";
+
+type TelegramApiCall = { method: string; payload: Record<string, unknown> };
 
 export async function createWorkerFixture(token: string, secret: string, botId: number) {
   const bundled = await build({ entryPoints: ["src/index.ts"], bundle: true, write: false, format: "esm", platform: "browser", conditions: ["browser"] });
@@ -24,7 +27,12 @@ export async function createWorkerFixture(token: string, secret: string, botId: 
     for (const statement of (await readFile(new URL(`../migrations/${name}`, import.meta.url), "utf8")).split(";").map(part => part.trim()).filter(Boolean))
       await DB.prepare(statement).execute();
   }
-  return {
-    DB, worker: await miniflare.getWorker("finance-settings"), mock: await miniflare.getWorker("telegram-mock"), dispose: () => miniflare.dispose()
-  };
+  const worker = await miniflare.getWorker("finance-settings");
+  const mock = await miniflare.getWorker("telegram-mock");
+  const webhook = (update: Update, header?: string) => worker.fetch("http://local/telegram", {
+    method: "POST", headers: header === undefined ? {} : { "X-Telegram-Bot-Api-Secret-Token": header }, body: JSON.stringify(update)
+  });
+  const calls = async () => await (await mock.fetch("http://mock.local/calls")).json() as TelegramApiCall[];
+  const lastCall = async (method: string) => (await calls()).findLast(call => call.method === method);
+  return { DB, worker, webhook, calls, lastCall, dispose: () => miniflare.dispose() };
 }

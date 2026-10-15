@@ -1,9 +1,10 @@
+import { createTelegramUpdates } from "./telegramUpdates";
 import { createSettings } from "./createSettings";
 import { InstanceConfigurationError, type InstanceSettings } from "../src/config/instanceSettings";
 import { expectRepositorySuccess } from "./repositoryAssertions";
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { Chat, Message, Update, User, UserFromGetMe } from "grammy/types";
+import type { UserFromGetMe } from "grammy/types";
 import { categories } from "./defaultCategories";
 import { formatCallbackData, parseCallbackData } from "../src/telegram/callbackData";
 import { createFinanceBot } from "../src/telegram/bot";
@@ -12,7 +13,6 @@ import { D1FinanceRepository } from "../src/storage/D1FinanceRepository";
 import type { SqlDatabase } from "../src/storage/SqlDatabase";
 import { hasValidWebhookSecret } from "../src/telegram/webhookSecret";
 
-type ReplyTarget = NonNullable<Message["reply_to_message"]>;
 type TelegramApiCall = { method: string; payload: Record<string, unknown> };
 let telegramFixtureNumber = 0;
 
@@ -33,28 +33,16 @@ async function addMember(database: SqlDatabase, userId: number, displayName: str
 async function createTelegramFixture(userId: number, botId: number, settings: InstanceSettings | (() => Promise<InstanceSettings>)) {
   const database = await createMigratedLocalD1(`telegram-scenario-${++telegramFixtureNumber}`);
   const repository = new D1FinanceRepository(database.DB);
-  const chat: Chat.PrivateChat = { id: userId, type: "private", first_name: "Test user" };
-  const user: User = { id: userId, is_bot: false, first_name: "Test user" };
+  const updates = createTelegramUpdates(userId);
   const botInfo = createTestBotInfo(botId);
   const calls: TelegramApiCall[] = [];
   const bot = createFinanceBot("123:fixture", repository, typeof settings === "function" ? settings : async () => settings);
   bot.botInfo = botInfo;
   bot.api.config.use(async (_previous, method, payload) => {
     calls.push({ method, payload });
-    return { ok: true, result: method === "sendMessage" ? { message_id: 20, date: 0, chat } : true } as never;
+    return { ok: true, result: method === "sendMessage" ? { message_id: 20, date: 0, chat: updates.chat } : true } as never;
   });
-  const replyTarget = (text: string, from: User): ReplyTarget => ({ message_id: 20, date: 0, chat, from, text, reply_to_message: undefined });
-  const message = (updateId: number, text: string, replyTo?: ReplyTarget): Update => ({
-    update_id: updateId, message: { message_id: updateId, date: 0, chat, from: user, text, ...(replyTo ? { reply_to_message: replyTo } : {}) }
-  });
-  const command = (updateId: number, text: string): Update => ({
-    update_id: updateId, message: { message_id: updateId, date: 0, chat, from: user, text,
-      entities: [{ type: "bot_command", offset: 0, length: text.length }] }
-  });
-  const callback = (updateId: number, data: string): Update => ({
-    update_id: updateId, callback_query: { id: String(updateId), from: user, chat_instance: "fixture", data, message: { message_id: 20, date: 0, chat } }
-  });
-  return { database, repository, bot, botInfo, calls, chat, user, message, command, callback, replyTarget };
+  return { database, repository, bot, botInfo, calls, ...updates };
 }
 
 function assertMenuShown(calls: TelegramApiCall[]) {
@@ -303,7 +291,7 @@ test("amount edit ignores a prompt not sent by the bot", async context => {
 
   await fixture.bot.handleUpdate(fixture.callback(401, formatCallbackData({ kind: "edit-prompt", expenseId: 1, field: "amount" })));
   const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
-  await fixture.bot.handleUpdate(fixture.message(402, "3000", fixture.replyTarget(prompt, fixture.user)));
+  await fixture.bot.handleUpdate(fixture.message(402, "3000", { replyTo: fixture.replyTarget(prompt, fixture.user) }));
   assert.equal((await fixture.repository.getExpenseById(1))?.amountRsd, 2490);
   assertMenuShown(fixture.calls);
 });
@@ -318,7 +306,7 @@ test("amount edit accepts the bot's prompt and restores the menu", async context
 
   await fixture.bot.handleUpdate(fixture.callback(401, formatCallbackData({ kind: "edit-prompt", expenseId: 1, field: "amount" })));
   const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
-  await fixture.bot.handleUpdate(fixture.message(402, "3000", fixture.replyTarget(prompt, fixture.botInfo)));
+  await fixture.bot.handleUpdate(fixture.message(402, "3000", { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
   assert.equal((await fixture.repository.getExpenseById(1))?.amountRsd, 3000);
   assertMenuShown(fixture.calls);
 });
@@ -334,7 +322,7 @@ test("date edit changes the explicitly seeded original date", async context => {
 
   await fixture.bot.handleUpdate(fixture.callback(401, formatCallbackData({ kind: "edit-prompt", expenseId: 1, field: "date" })));
   const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
-  await fixture.bot.handleUpdate(fixture.message(402, "18.09.2026", fixture.replyTarget(prompt, fixture.botInfo)));
+  await fixture.bot.handleUpdate(fixture.message(402, "18.09.2026", { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
   assert.equal((await fixture.repository.getExpenseById(1))?.spentOn, "2026-09-18");
   assertMenuShown(fixture.calls);
 });
@@ -349,7 +337,7 @@ test("comment edit replaces the original comment", async context => {
 
   await fixture.bot.handleUpdate(fixture.callback(401, formatCallbackData({ kind: "edit-prompt", expenseId: 1, field: "comment" })));
   const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
-  await fixture.bot.handleUpdate(fixture.message(402, "Покупка", fixture.replyTarget(prompt, fixture.botInfo)));
+  await fixture.bot.handleUpdate(fixture.message(402, "Покупка", { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
   assert.equal((await fixture.repository.getExpenseById(1))?.comment, "Покупка");
   assertMenuShown(fixture.calls);
 });
@@ -407,11 +395,7 @@ test("webhook secret validation rejects missing and mismatching headers", () => 
 test("group command explains that the bot works in private chat", async context => {
   const fixture = await createTelegramFixture(127, 999, createSettings());
   context.after(() => fixture.database.dispose());
-  const groupChat: Chat.SupergroupChat = { id: -100, type: "supergroup", title: "Семья" };
-  await fixture.bot.handleUpdate({ update_id: 500, message: {
-    message_id: 500, date: 0, chat: groupChat, from: fixture.user, text: "/start",
-    entities: [{ type: "bot_command", offset: 0, length: 6 }]
-  } });
+  await fixture.bot.handleUpdate(fixture.command(500, "/start", { chat: { id: -100, type: "supergroup", title: "Семья" } }));
   assert.equal(fixture.calls.at(-1)?.method, "sendMessage");
   assert.match(String(fixture.calls.at(-1)?.payload.text), /только в личном чате/);
 });
@@ -419,11 +403,9 @@ test("group command explains that the bot works in private chat", async context 
 test("group callback shows a private-chat alert", async context => {
   const fixture = await createTelegramFixture(127, 999, createSettings());
   context.after(() => fixture.database.dispose());
-  const groupChat: Chat.SupergroupChat = { id: -100, type: "supergroup", title: "Семья" };
-  await fixture.bot.handleUpdate({ update_id: 506, callback_query: {
-    id: "506", from: fixture.user, chat_instance: "fixture", data: formatCallbackData({ kind: "details", expenseId: 1 }),
-    message: { message_id: 20, date: 0, chat: groupChat }
-  } });
+  await fixture.bot.handleUpdate(fixture.callback(506, formatCallbackData({ kind: "details", expenseId: 1 }), {
+    chat: { id: -100, type: "supergroup", title: "Семья" }
+  }));
   assert.equal(fixture.calls.at(-1)?.method, "answerCallbackQuery");
   assert.match(String(fixture.calls.at(-1)?.payload.text), /только в личном чате/);
   assert.equal(fixture.calls.at(-1)?.payload.show_alert, true);
@@ -432,9 +414,7 @@ test("group callback shows a private-chat alert", async context => {
 test("message without a sender explains why access cannot be checked", async context => {
   const fixture = await createTelegramFixture(127, 999, createSettings());
   context.after(() => fixture.database.dispose());
-  await fixture.bot.handleUpdate({ update_id: 501, message: {
-    message_id: 501, date: 0, chat: fixture.chat, text: "2490"
-  } } as Update);
+  await fixture.bot.handleUpdate(fixture.message(501, "2490", { from: undefined }));
   assert.match(String(fixture.calls.at(-1)?.payload.text), /Не удалось определить ваш Telegram ID/);
 });
 
@@ -443,10 +423,7 @@ test("photo message asks for text instead of remaining silent", async context =>
   const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
-  await fixture.bot.handleUpdate({ update_id: 502, message: {
-    message_id: 502, date: 0, chat: fixture.chat, from: fixture.user,
-    photo: [{ file_id: "photo", file_unique_id: "photo", width: 1, height: 1 }]
-  } });
+  await fixture.bot.handleUpdate(fixture.photo(502));
   assert.match(String(fixture.calls.at(-1)?.payload.text), /только текстовые сообщения/);
 });
 
@@ -500,10 +477,7 @@ test("callback reports access revoked between checks in chat and alert", async c
 test("unsupported callback is acknowledged with an explanation", async context => {
   const fixture = await createTelegramFixture(127, 999, createSettings());
   context.after(() => fixture.database.dispose());
-  await fixture.bot.handleUpdate({ update_id: 508, callback_query: {
-    id: "508", from: fixture.user, chat_instance: "fixture", game_short_name: "unsupported",
-    message: { message_id: 20, date: 0, chat: fixture.chat }
-  } });
+  await fixture.bot.handleUpdate(fixture.gameCallback(508, "unsupported"));
   assert.equal(fixture.calls.at(-1)?.method, "answerCallbackQuery");
   assert.equal(fixture.calls.at(-1)?.payload.text, "Кнопка не поддерживается");
   assert.equal(fixture.calls.at(-1)?.payload.show_alert, true);
@@ -513,32 +487,18 @@ test("unexpected failures include the update ID without exposing internal detail
   const userId = 127;
   const botId = 999;
   const updateId = 600;
-  const database = await createMigratedLocalD1("telegram-failure-edge-test");
-  context.after(() => database.dispose());
-  const repository = new D1FinanceRepository(database.DB);
-  repository.getEnabledMember = async () => { throw new Error("secret-db-detail"); };
-  const bot = createFinanceBot("123:fixture", repository, async () => createSettings());
-  bot.botInfo = createTestBotInfo(botId);
-  const calls: { method: string; payload: Record<string, unknown> }[] = [];
-  bot.api.config.use(async (_previous, method, payload) => {
-    calls.push({ method, payload });
-    return { ok: true, result: method === "sendMessage" ? { message_id: 20, date: 0, chat: { id: userId, type: "private" } } : true } as never;
-  });
-  const user = { id: userId, is_bot: false, first_name: "Анна" };
-  const privateChat = { id: userId, type: "private" as const };
+  const fixture = await createTelegramFixture(userId, botId, createSettings());
+  context.after(() => fixture.database.dispose());
+  fixture.repository.getEnabledMember = async () => { throw new Error("secret-db-detail"); };
+  const { bot, calls } = fixture;
   const previousError = console.error;
   console.error = () => undefined;
   try {
-    await assert.rejects(bot.handleUpdate({ update_id: updateId, message: {
-      message_id: updateId, date: 0, chat: privateChat, from: user, text: "История"
-    } } as Update), /secret-db-detail/);
+    await assert.rejects(bot.handleUpdate(fixture.message(updateId, "История")), /secret-db-detail/);
     assert.match(String(calls.at(-1)?.payload.text), /Код: 600/);
     assert.doesNotMatch(String(calls.at(-1)?.payload.text), /secret-db-detail/);
 
-    await bot.handleUpdate({ update_id: 601, callback_query: {
-      id: "601", from: user, chat_instance: "fixture", data: formatCallbackData({ kind: "details", expenseId: 1 }),
-      message: { message_id: 20, date: 0, chat: privateChat }
-    } } as Update);
+    await bot.handleUpdate(fixture.callback(601, formatCallbackData({ kind: "details", expenseId: 1 })));
     assert.equal(calls.at(-1)?.method, "answerCallbackQuery");
     assert.match(String(calls.at(-1)?.payload.text), /Код: 601/);
     assert.equal(calls.at(-1)?.payload.show_alert, true);
@@ -563,7 +523,7 @@ test("category addition uses ForceReply and enables both expense entry paths", a
   await fixture.bot.handleUpdate(fixture.callback(801, "m1:add"));
   const prompt = fixture.calls.findLast(call => call.method === "sendMessage")!.payload;
   assert.equal((prompt.reply_markup as { force_reply: boolean }).force_reply, true);
-  await fixture.bot.handleUpdate(fixture.message(802, categoryName, fixture.replyTarget(String(prompt.text), fixture.botInfo)));
+  await fixture.bot.handleUpdate(fixture.message(802, categoryName, { replyTo: fixture.replyTarget(String(prompt.text), fixture.botInfo) }));
   const category = (await fixture.repository.getCategories()).find(item => item.name === categoryName)!;
   assert(category);
   await fixture.bot.handleUpdate(fixture.message(803, `${textAmountRsd} ${categoryName} ${comment}`));
@@ -596,7 +556,7 @@ test("another member renames a category through ForceReply and updates historica
   const prompt = fixture.calls.findLast(call => call.method === "sendMessage")!.payload;
   assert.equal((prompt.reply_markup as { force_reply: boolean }).force_reply, true);
   assert.match(String(prompt.text), /прошлых расходов/);
-  await fixture.bot.handleUpdate(fixture.message(811, renamedName, fixture.replyTarget(String(prompt.text), fixture.botInfo)));
+  await fixture.bot.handleUpdate(fixture.message(811, renamedName, { replyTo: fixture.replyTarget(String(prompt.text), fixture.botInfo) }));
   assert.equal((await fixture.repository.getExpenseById(saved.expense.id))?.categoryName, renamedName);
   assert.equal((await fixture.repository.getCategory(category.id))?.name, renamedName);
   await fixture.bot.handleUpdate(fixture.message(812, `700 ${initialName}`));
@@ -662,7 +622,7 @@ test("an expense in an archived category can still be edited through ForceReply"
   expectRepositorySuccess(await fixture.repository.setCategoryActive(category.id, false));
   await fixture.bot.handleUpdate(fixture.callback(840, `p:${saved.expense.id}:1`));
   const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
-  await fixture.bot.handleUpdate(fixture.message(841, "02.10.2026", fixture.replyTarget(prompt, fixture.botInfo)));
+  await fixture.bot.handleUpdate(fixture.message(841, "02.10.2026", { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
   assert.equal((await fixture.repository.getExpenseById(saved.expense.id))?.spentOn, finalExpenseDate);
 });
 
@@ -703,10 +663,10 @@ test("category prompts reject invalid names, duplicates and replies to another s
   await addMember(fixture.database.DB, userId, "Анна", 1);
   await fixture.bot.handleUpdate(fixture.callback(850, "m1:add"));
   const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
-  await fixture.bot.handleUpdate(fixture.message(851, "Новая категория", fixture.replyTarget(prompt, fixture.user)));
+  await fixture.bot.handleUpdate(fixture.message(851, "Новая категория", { replyTo: fixture.replyTarget(prompt, fixture.user) }));
   assert.match(String(fixture.calls.at(-1)?.payload.text), /запрос редактирования/);
   for (const name of ["", "Школа!", "123", "Я".repeat(81), "  ПРОДУКТЫ "])
-    await fixture.bot.handleUpdate(fixture.message(852, name, fixture.replyTarget(prompt, fixture.botInfo)));
+    await fixture.bot.handleUpdate(fixture.message(852, name, { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
   assert.equal((await fixture.repository.getCategories()).length, categories.length);
   assert.match(String(fixture.calls.at(-1)?.payload.text), /уже существует/);
   assertMenuShown(fixture.calls);
@@ -777,9 +737,9 @@ for (const surface of ["history", "details", "edit-actions", "amount-prompt", "s
         await fixture.bot.handleUpdate(fixture.callback(900, `e1:${expense.id}:other`));
         break;
       case "edit-error":
-        await fixture.bot.handleUpdate(fixture.message(900, "0", fixture.replyTarget(
+        await fixture.bot.handleUpdate(fixture.message(900, "0", { replyTo: fixture.replyTarget(
           `Редактирование расхода №${expense.id} · Новая сумма\n\nОтправьте целую сумму в ${displayCurrency}.`, fixture.botInfo
-        )));
+        ) }));
     }
     const moneyCall = fixture.calls.findLast(call => call.method === "sendMessage" || call.method === "editMessageText");
     assert(moneyCall);
@@ -808,7 +768,7 @@ test("editing an amount with a non-RSD label keeps integer storage and expense i
     sourceActionKey, amountRsd: initialAmount, spentOn, categoryId: "groceries", createdBy: String(userId)
   })).expense;
   const prompt = `Редактирование расхода №${expense.id} · Новая сумма\n\nОтправьте целую сумму в ${displayCurrency}.`;
-  await fixture.bot.handleUpdate(fixture.message(950, String(nextAmount), fixture.replyTarget(prompt, fixture.botInfo)));
+  await fixture.bot.handleUpdate(fixture.message(950, String(nextAmount), { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
   const updated = await fixture.repository.getExpenseById(expense.id);
   assert.equal(updated?.amountRsd, nextAmount);
   assert.equal(updated?.sourceActionKey, sourceActionKey);
@@ -846,7 +806,7 @@ for (const scenario of ["start", "help", "categories", "category-add", "category
         expectedText = "Категории: выберите категорию";
         break;
       case "category-add":
-        await fixture.bot.handleUpdate(fixture.message(960, "Школа", fixture.replyTarget("Добавление категории", fixture.botInfo)));
+        await fixture.bot.handleUpdate(fixture.message(960, "Школа", { replyTo: fixture.replyTarget("Добавление категории", fixture.botInfo) }));
         expectedText = "Категория сохранена";
         break;
       case "category-archive":

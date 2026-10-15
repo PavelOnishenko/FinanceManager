@@ -1,12 +1,9 @@
 import assert from "node:assert/strict";
-import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
-import { build } from "esbuild";
-import { Miniflare } from "miniflare";
 import type { Update } from "grammy/types";
-import { CloudflareD1Database, type CloudflareD1Binding } from "../src/storage/CloudflareD1Database";
+import { createTelegramUpdates } from "./telegramUpdates";
+import { createWorkerFixture } from "./workerFixture";
 
-type ApiCall = { method: string; payload: Record<string, unknown> };
 type ExpenseRow = { id: number; amount_rsd: number; category_id: string; spent_on: string; comment: string | null };
 
 test("local webhook smoke covers authentication, expenses, editing, deletion and statistics", async () => {
@@ -14,47 +11,15 @@ test("local webhook smoke covers authentication, expenses, editing, deletion and
   const botId = 9001;
   const token = "123:fixture";
   const secret = "local-smoke-secret";
-  const chat = { id: userId, type: "private" as const, first_name: "Test user" };
-  const user = { id: userId, is_bot: false, first_name: "Test user" };
-  const bundled = await build({ entryPoints: ["src/index.ts"], bundle: true, write: false, format: "esm", platform: "browser", conditions: ["browser"] });
-  const mockApi = await readFile(new URL("./mockTelegramApiWorker.js", import.meta.url), "utf8");
-  const miniflare = new Miniflare({ workers: [
-    { config: {
-      name: "finance-smoke", type: "worker", compatibilityDate: "2026-09-16",
-      env: { DB: { type: "d1" }, TELEGRAM_BOT_TOKEN: { type: "text", value: token }, TELEGRAM_WEBHOOK_SECRET: { type: "text", value: secret } },
-      manifest: { mainModule: "index.js", modulesRoot: process.cwd(), modules: { "index.js": { type: "esm", contents: bundled.outputFiles[0]!.text } } }
-    }, dev: { outboundService: { type: "worker", worker: "telegram-mock" } } },
-    { config: {
-      name: "telegram-mock", type: "worker", compatibilityDate: "2026-09-16",
-      env: { BOT_ID: { type: "text", value: String(botId) }, BOT_TOKEN: { type: "text", value: token } },
-      manifest: { mainModule: "mock.js", modulesRoot: process.cwd(), modules: { "mock.js": { type: "esm", contents: mockApi } } }
-    } }
-  ] });
-
+  const fixture = await createWorkerFixture(token, secret, botId);
   try {
-    const DB = new CloudflareD1Database((await miniflare.getBindings<{ DB: CloudflareD1Binding }>("finance-smoke")).DB);
-    const migrationsDirectory = new URL("../migrations/", import.meta.url);
-    const migrationNames = (await readdir(migrationsDirectory)).filter(name => name.endsWith(".sql")).sort();
-    const migration = (await Promise.all(migrationNames.map(name => readFile(new URL(name, migrationsDirectory), "utf8")))).join("\n");
-    for (const statement of migration.split(";").map(part => part.trim()).filter(Boolean))
-      await DB.prepare(statement).execute();
-
-    const worker = await miniflare.getWorker("finance-smoke");
-    const mock = await miniflare.getWorker("telegram-mock");
-    const calls = async () => await (await mock.fetch("http://mock.local/calls")).json() as ApiCall[];
-    const lastCall = async (method: string) => (await calls()).filter(call => call.method === method).at(-1);
+    const { DB, worker, calls, lastCall, webhook } = fixture;
+    const updates = createTelegramUpdates(userId);
     const rows = async () => await DB.prepare("SELECT id, amount_rsd, category_id, spent_on, comment FROM expenses ORDER BY id").many<ExpenseRow>();
-    const message = (updateId: number, text: string, replyText?: string): Update => ({ update_id: updateId, message: {
-      message_id: updateId, date: 0, chat, from: user, text, ...(replyText ? { reply_to_message: {
-        message_id: 20, date: 0, chat, from: { ...user, id: botId, is_bot: true }, text: replyText, reply_to_message: undefined
-      } } : {})
-    } });
-    const callback = (updateId: number, data: string): Update => ({ update_id: updateId, callback_query: {
-      id: String(updateId), from: user, chat_instance: "fixture", data, message: { message_id: 20, date: 0, chat }
-    } });
-    const webhook = async (update: Update, header?: string) => await worker.fetch("http://smoke.local/telegram", {
-      method: "POST", headers: header ? { "X-Telegram-Bot-Api-Secret-Token": header } : {}, body: JSON.stringify(update)
+    const message = (updateId: number, text: string, replyText?: string) => updates.message(updateId, text, {
+      replyTo: replyText ? updates.replyTarget(replyText, { ...updates.user, id: botId, is_bot: true }) : undefined
     });
+    const { callback } = updates;
     const accepted = async (update: Update) => assert.equal((await webhook(update, secret)).status, 200);
 
     assert.deepEqual(await (await worker.fetch("http://smoke.local/health")).json(), { status: "ok", service: "family-finance-bot" });
@@ -121,6 +86,6 @@ test("local webhook smoke covers authentication, expenses, editing, deletion and
     await accepted(callback(420, "s:202602"));
     assert.match(String((await lastCall("editMessageText"))?.payload.text), /Итого: 3000 RSD/);
   } finally {
-    await miniflare.dispose();
+    await fixture.dispose();
   }
 });
