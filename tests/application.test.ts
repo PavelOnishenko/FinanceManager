@@ -241,7 +241,6 @@ for (const entry of ["full-text", "category-button"]) {
     const displayCurrency = "EUR";
     const financeTimeZone = "America/New_York";
     const currentTime = new Date("2026-03-01T00:30:00Z");
-    const spentOn = "2026-02-28";
     const amountRsd = 2490;
     const sourceUpdateId = 9900;
     const database = await createApplicationTestContext();
@@ -259,7 +258,7 @@ for (const entry of ["full-text", "category-button"]) {
     assert.equal(result.kind, ApplicationResultKind.ExpenseSaved);
     if (result.kind !== ApplicationResultKind.ExpenseSaved)
       throw new Error("Expected saved expense");
-    assert.equal(result.expense.spentOn, spentOn);
+    assert.equal(result.expense.spentOn, "2026-02-28");
     assert.equal(result.expense.amountRsd, amountRsd);
     assert.equal(result.expense.sourceActionKey, `expense:${sourceUpdateId}`);
   });
@@ -267,7 +266,6 @@ for (const entry of ["full-text", "category-button"]) {
 
 test("configured previous-month statistics use local boundaries", async context => {
   const memberId = "zone-statistics";
-  const currentTime = new Date("2026-03-01T00:30:00Z");
   const financeTimeZone = "America/New_York";
   const amountRsd = 370;
   const spentOn = "2026-01-31";
@@ -277,40 +275,31 @@ test("configured previous-month statistics use local boundaries", async context 
   expectRepositorySuccess(await database.repository.createExpense({
     sourceActionKey: "expense:9901", amountRsd, categoryId: "groceries", spentOn, createdBy: memberId
   }));
-  const result = await getPreviousMonthStatistics(database.repository, memberId, currentTime, financeTimeZone);
+  const result = await getPreviousMonthStatistics(database.repository, memberId, new Date("2026-03-01T00:30:00Z"), financeTimeZone);
   assert.equal(result.kind, ApplicationResultKind.ExpenseStatistics);
-  if (result.kind !== ApplicationResultKind.ExpenseStatistics)
-    throw new Error("Expected statistics");
   assert.deepEqual(result.range, { fromDate: "2026-01-01", toDate: spentOn });
   assert.equal(result.statistics.totalRsd, amountRsd);
 });
 
 test("a timezone change dates future expenses without changing historical rows", async context => {
   const memberId = "zone-change";
-  const displayCurrency = "EUR";
-  const initialZone = "Europe/Belgrade";
-  const nextZone = "America/New_York";
   const currentTime = new Date("2026-03-01T00:30:00Z");
-  const initialDate = "2026-03-01";
-  const nextDate = "2026-02-28";
   const amountRsd = 470;
   const database = await createApplicationTestContext();
   context.after(() => database.dispose());
   await seedMember(database.DB, memberId, "Анна", 1);
-  await database.DB.prepare("UPDATE instance_settings SET display_currency = ?, finance_time_zone = ? WHERE id = 1").bind(displayCurrency, initialZone).execute();
+  await database.DB.prepare("UPDATE instance_settings SET display_currency = ?, finance_time_zone = ? WHERE id = 1").bind("EUR", "Europe/Belgrade").execute();
   const initial = await processExpenseMessage(database.repository, {
     telegramUserId: memberId, sourceUpdateId: 9800, text: `${amountRsd} продукты`, currentTime
   }, await readInstanceSettings(database.DB));
-  if (initial.kind !== ApplicationResultKind.ExpenseSaved)
-    throw new Error("Expected saved expense");
-  assert.equal(initial.expense.spentOn, initialDate);
-  await database.DB.prepare("UPDATE instance_settings SET finance_time_zone = ? WHERE id = 1").bind(nextZone).execute();
+  assert.equal(initial.kind, ApplicationResultKind.ExpenseSaved);
+  assert.equal(initial.expense.spentOn, "2026-03-01");
+  await database.DB.prepare("UPDATE instance_settings SET finance_time_zone = ? WHERE id = 1").bind("America/New_York").execute();
   const next = await processExpenseMessage(database.repository, {
     telegramUserId: memberId, sourceUpdateId: 9801, text: `${amountRsd} продукты`, currentTime
   }, await readInstanceSettings(database.DB));
-  if (next.kind !== ApplicationResultKind.ExpenseSaved)
-    throw new Error("Expected saved expense");
-  assert.equal(next.expense.spentOn, nextDate);
+  assert.equal(next.kind, ApplicationResultKind.ExpenseSaved);
+  assert.equal(next.expense.spentOn, "2026-02-28");
   assert.equal(next.expense.amountRsd, amountRsd);
   assert.deepEqual(await database.repository.getExpenseById(initial.expense.id), initial.expense);
 });
