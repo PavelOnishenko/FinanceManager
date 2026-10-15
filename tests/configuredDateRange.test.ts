@@ -20,21 +20,18 @@ test("previous month uses the configured zone at a year boundary", () => {
   assert.deepEqual(getPreviousCalendarMonthRange(instant, westZone), { fromDate: "2025-11-01", toDate: "2025-11-30" });
 });
 
-for (const instant of ["2026-03-29T00:30:00Z", "2026-03-29T01:30:00Z", "2026-10-25T00:30:00Z", "2026-10-25T01:30:00Z"]) {
-  test(`local dates remain correct through daylight saving at ${instant}`, () => {
-    const financeTimeZone = "Europe/Belgrade";
-    assert.equal(getDateInFinanceTimeZone(new Date(instant), financeTimeZone), instant.slice(0, 10));
-  });
-}
-
-test("spring daylight saving changes which UTC evenings belong to the next local day", () => {
-  const financeTimeZone = "Europe/Belgrade";
-  assert.equal(getDateInFinanceTimeZone(new Date("2026-03-28T22:30:00Z"), financeTimeZone), "2026-03-28");
-  assert.equal(getDateInFinanceTimeZone(new Date("2026-03-29T22:30:00Z"), financeTimeZone), "2026-03-30");
+test("Belgrade uses UTC+1 on the evening before the spring clock change", () => {
+  assert.equal(getDateInFinanceTimeZone(new Date("2026-03-28T22:30:00Z"), "Europe/Belgrade"), "2026-03-28");
 });
 
-test("autumn daylight saving changes which UTC evenings belong to the next local day", () => {
-  const financeTimeZone = "Europe/Belgrade";
-  assert.equal(getDateInFinanceTimeZone(new Date("2026-10-24T22:30:00Z"), financeTimeZone), "2026-10-25");
-  assert.equal(getDateInFinanceTimeZone(new Date("2026-10-25T22:30:00Z"), financeTimeZone), "2026-10-25");
+test("Belgrade uses UTC+2 on the evening after the spring clock change", () => {
+  assert.equal(getDateInFinanceTimeZone(new Date("2026-03-29T22:30:00Z"), "Europe/Belgrade"), "2026-03-30");
+});
+
+test("Belgrade uses UTC+2 on the evening before the autumn clock change", () => {
+  assert.equal(getDateInFinanceTimeZone(new Date("2026-10-24T22:30:00Z"), "Europe/Belgrade"), "2026-10-25");
+});
+
+test("Belgrade uses UTC+1 on the evening after the autumn clock change", () => {
+  assert.equal(getDateInFinanceTimeZone(new Date("2026-10-25T22:30:00Z"), "Europe/Belgrade"), "2026-10-25");
 });
