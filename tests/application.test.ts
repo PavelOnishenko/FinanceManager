@@ -1,4 +1,4 @@
-import { readInstanceSettings } from "../src/config/instanceSettings";
+import { readInstanceSettings, type InstanceSettings } from "../src/config/instanceSettings";
 import { expectRepositorySuccess } from "./repositoryAssertions";
 import assert from "node:assert/strict";
 import test from "node:test";
@@ -13,6 +13,10 @@ import { D1FinanceRepository } from "../src/storage/D1FinanceRepository";
 import type { SqlDatabase } from "../src/storage/SqlDatabase";
 
 let testDatabaseNumber = 0;
+
+function createSettings(overrides: Partial<InstanceSettings> = {}): InstanceSettings {
+  return { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade", ...overrides };
+}
 
 async function createApplicationTestContext() {
   const context = await createMigratedLocalD1(`application-test-${++testDatabaseNumber}`);
@@ -51,7 +55,7 @@ test("creates an expense from a full message with the Belgrade local date", asyn
     await seedMember(context.DB, telegramUserId, "Анна", 1);
     const result = await processExpenseMessage(context.repository, {
       telegramUserId, sourceUpdateId, text: "2490 продукты Lidl", currentTime
-    }, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+    }, createSettings({ financeTimeZone: "Europe/Belgrade" }));
     assert(result.kind === ApplicationResultKind.ExpenseSaved);
     assert.equal(result.created, true);
     assert.equal(result.expense.sourceActionKey, `expense:${sourceUpdateId}`);
@@ -74,7 +78,7 @@ test("prepares every category after an amount-only message without creating a dr
     await seedMember(context.DB, telegramUserId, "Анна", 1);
     const result = await processExpenseMessage(context.repository, {
       telegramUserId, sourceUpdateId, text: amountRsd.toString(), currentTime: new Date("2026-09-18T10:00:00.000Z")
-    }, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+    }, createSettings());
     assert.deepEqual(result, {
       kind: ApplicationResultKind.CategorySelection, sourceUpdateId, amountRsd,
       categories: categories.map(({ id, name }) => ({ id, name }))
@@ -95,10 +99,10 @@ test("creates only one expense when category selection is delivered twice", asyn
     await seedMember(context.DB, telegramUserId, "Анна", 1);
     const first = await createExpenseAfterCategorySelection(context.repository, {
       telegramUserId, sourceUpdateId, amountRsd, categoryId: "transport", currentTime
-    }, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+    }, createSettings());
     const duplicate = await createExpenseAfterCategorySelection(context.repository, {
       telegramUserId, sourceUpdateId, amountRsd, categoryId: "groceries", currentTime
-    }, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+    }, createSettings());
     assert(first.kind === ApplicationResultKind.ExpenseSaved);
     assert(duplicate.kind === ApplicationResultKind.ExpenseSaved);
     assert.equal(first.created, true);
@@ -120,7 +124,7 @@ test("returns shared history and expense details to another enabled member", asy
     await seedMember(context.DB, viewerId, "Борис", 1);
     const saved = await processExpenseMessage(context.repository, {
       telegramUserId: authorId, sourceUpdateId: 7100, text: "800 рестораны Ужин", currentTime: new Date("2026-09-18T10:00:00.000Z")
-    }, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+    }, createSettings());
     assert(saved.kind === ApplicationResultKind.ExpenseSaved);
     const history = await getExpenseHistory(context.repository, viewerId);
     const details = await getExpenseDetails(context.repository, viewerId, saved.expense.id);
@@ -141,7 +145,7 @@ test("edits every mutable field and deletes a shared expense", async () => {
     await seedMember(context.DB, editorId, "Борис", 1);
     const saved = await processExpenseMessage(context.repository, {
       telegramUserId: authorId, sourceUpdateId: 8100, text: "1200 продукты Старое", currentTime: new Date("2026-09-18T10:00:00.000Z")
-    }, { displayCurrency: "RSD", financeTimeZone: "Europe/Belgrade" });
+    }, createSettings());
     assert(saved.kind === ApplicationResultKind.ExpenseSaved);
     const expenseId = saved.expense.id;
     await editExpense(context.repository, editorId, expenseId, { field: "amount", amountRsd: 2400 }, "RSD");
@@ -247,11 +251,11 @@ for (const entry of ["full-text", "category-button"]) {
     if (entry === "full-text")
       result = await processExpenseMessage(database.repository, {
         telegramUserId: memberId, sourceUpdateId, text: `${amountRsd} продукты`, currentTime
-      }, { displayCurrency, financeTimeZone });
+      }, createSettings({ displayCurrency, financeTimeZone }));
     else
       result = await createExpenseAfterCategorySelection(database.repository, {
         telegramUserId: memberId, sourceUpdateId, amountRsd, categoryId: "groceries", currentTime
-      }, { displayCurrency, financeTimeZone });
+      }, createSettings({ displayCurrency, financeTimeZone }));
     assert.equal(result.kind, ApplicationResultKind.ExpenseSaved);
     if (result.kind !== ApplicationResultKind.ExpenseSaved)
       throw new Error("Expected saved expense");
