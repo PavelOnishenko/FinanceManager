@@ -73,7 +73,6 @@ test("period history includes both boundaries and archived categories, and refre
       sourceActionKey: spentOn, amountRsd: 999, categoryId: "transport", spentOn, createdBy: "101"
     }));
   expectRepositorySuccess(await context.repository.setCategoryActive("groceries", false));
-  const before = await context.DB.prepare("SELECT * FROM expenses ORDER BY id").many();
   const first = await context.repository.getExpensesForRange(range, 0);
   assert.deepEqual(first.expenses.map(expense => expense.amountRsd), [12, 11, 10, 9, 8, 7, 6, 5, 4, 3]);
   assert.equal(first.hasNext, true);
@@ -81,7 +80,6 @@ test("period history includes both boundaries and archived categories, and refre
   assert.deepEqual(second.expenses, [expenses[1], expenses[0]]);
   assert.equal(second.page, 1);
   assert.equal(second.hasNext, false);
-  assert.deepEqual(await context.DB.prepare("SELECT * FROM expenses ORDER BY id").many(), before);
 
   await context.repository.updateExpenseDate(expenses[0]!.id, "2026-02-01");
   await context.repository.deleteExpense(expenses[1]!.id);

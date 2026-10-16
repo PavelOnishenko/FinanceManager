@@ -72,6 +72,10 @@ function buttonData(calls: TelegramApiCall[], method: "sendMessage" | "editMessa
   return button.callback_data;
 }
 
+// todo tests like this are still terrible to read. We need to come up with more helping stuff (funcs etc) so they are more human readable.
+// I want less braces, less question marks, less strings, I want to be able to follow the scenario easier, more plain english
+// and also comments for stuff that is hard to memorize and is highly non-obvious like h:202601, 
+// and describing actions of the scenario just before they start
 test("period history reaches older expenses, keeps its range while paging, and supports details, editing and deletion", async context => {
   const fixture = await createTelegramFixture(127, 999, createSettings({ displayCurrency: "EUR" }));
   context.after(() => fixture.database.dispose());
@@ -86,9 +90,9 @@ test("period history reaches older expenses, keeps its range while paging, and s
   const recent = inlineKeyboard(fixture.calls, "sendMessage");
   assert.equal(recent[0]?.[0]?.text, "Другой период");
   assert.equal(recent.flat().filter(button => parseCallbackData(button.callback_data)?.kind === "details").length, 10);
-  assert(!recent.flat().some(button => button.callback_data === "d:1"));
+  assert(!recent.flat().some(button => button.callback_data === "d:1")); // todo a comment here would be nice as to what this checks
 
-  await fixture.bot.handleUpdate(fixture.callback(801, "h:202601"));
+  await fixture.bot.handleUpdate(fixture.callback(801, "h:202601")); // todo a comment here would be nice
   assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /2026-01-01 — 2026-01-31\nСтраница 1/);
   const first = inlineKeyboard(fixture.calls, "editMessageText");
   assert.equal(first[0]?.[0]?.text, "Другой период");

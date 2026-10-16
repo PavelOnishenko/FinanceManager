@@ -7,12 +7,18 @@ test("callback actions round-trip within Telegram's 64-byte limit", () => {
     { kind: "calendar-noop" },
     { kind: "create", sourceUpdateId: Number.MAX_SAFE_INTEGER, amountRsd: Number.MAX_SAFE_INTEGER, categoryId: "u_0123456789_-" },
     { kind: "create", sourceUpdateId: 9007199254740991, amountRsd: 9007199254740991, categoryId: "personal-care" },
-    { kind: "details", expenseId: 23 }, { kind: "category-list", expenseId: 23 }, { kind: "edit-actions", expenseId: 23 },
-    { kind: "delete-request", expenseId: 23 }, { kind: "delete-confirm", expenseId: 23 },
-    { kind: "edit-prompt", expenseId: 23, field: "comment" }, { kind: "edit-category", expenseId: 23, categoryId: "groceries" },
-    { kind: "statistics-month", month: "2026-02" }, { kind: "calendar", destination: "statistics", month: "2026-03", startDate: "2026-02-28" },
+    { kind: "details", expenseId: 23 }, 
+    { kind: "category-list", expenseId: 23 }, 
+    { kind: "edit-actions", expenseId: 23 },
+    { kind: "delete-request", expenseId: 23 },
+    { kind: "delete-confirm", expenseId: 23 },
+    { kind: "edit-prompt", expenseId: 23, field: "comment" }, 
+    { kind: "edit-category", expenseId: 23, categoryId: "groceries" },
+    { kind: "statistics-month", month: "2026-02" }, 
+    { kind: "calendar", destination: "statistics", month: "2026-03", startDate: "2026-02-28" },
     { kind: "calendar-day", destination: "statistics", month: "2026-03", day: 1, startDate: "2026-02-28" },
-    { kind: "history-recent" }, { kind: "history-picker" }, { kind: "history-month", month: "2026-01" },
+    { kind: "history-recent" }, { kind: "history-picker" }, 
+    { kind: "history-month", month: "2026-01" },
     { kind: "history-page", fromDate: "2026-01-01", toDate: "9999-12-31", page: Number.MAX_SAFE_INTEGER },
     { kind: "calendar", destination: "history", month: "2026-03", startDate: "2026-02-28" },
     { kind: "calendar-day", destination: "history", month: "2026-03", day: 1, startDate: "2026-02-28" }
@@ -24,6 +30,8 @@ test("callback actions round-trip within Telegram's 64-byte limit", () => {
   }
 });
 
+// todo would be nice to have a callback text structure reminder here to easily understand what exactly is wrong with the examples. 
+// I mean, just a comment. Here and in other places heavily relying on the callback text structure.
 test("history callbacks reject malformed pages and ranges and enforce the shared 2026 floor", () => {
   for (const data of [
     "h:202613", "k:history:202602:20260229", "t:history:202602:0:30", "t:history:202602:0:1:extra", "hr:extra",
