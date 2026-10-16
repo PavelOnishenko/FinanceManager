@@ -366,7 +366,10 @@ P4 is the next product prerequisite after the completed bot-side P2/P3 work; fin
 - [ ] Make every expense in a selected period reachable with pages of at most 10 records and **Назад** / **Далее** controls.
   Preserve the period when paging and order by descending expense ID, as in the default history, so ties in `spent_on` are unambiguous.
   Reset to the first page when changing the period; do not silently truncate a period to its latest 10 records or send an unbounded list.
-  If edits/deletions change matching records between requests, refresh from current data and keep navigation usable, including an empty page.
+  Reload matching records from current data on each page transition: another member may have deleted an expense or changed its date
+  so it no longer belongs to this period. If the requested page has no records, show the nearest preceding nonempty page instead.
+  If no expenses remain in the entire period, show **За выбранный период расходов нет.** with **Другой период** and **Последние 10**.
+  Do not display an empty page as a separate screen.
 - [ ] Reuse the date-range helpers, month navigation, and calendar rendering from statistics instead of maintaining a second calendar.
   Carry an explicit history/statistics destination in callbacks so selecting a day in history returns an expense list and selecting
   it in statistics still returns totals. Preserve already-sent statistics buttons and the Telegram 64-byte callback-data limit.
