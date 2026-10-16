@@ -10,8 +10,8 @@ test("callback actions round-trip within Telegram's 64-byte limit", () => {
     { kind: "details", expenseId: 23 }, { kind: "category-list", expenseId: 23 }, { kind: "edit-actions", expenseId: 23 },
     { kind: "delete-request", expenseId: 23 }, { kind: "delete-confirm", expenseId: 23 },
     { kind: "edit-prompt", expenseId: 23, field: "comment" }, { kind: "edit-category", expenseId: 23, categoryId: "groceries" },
-    { kind: "statistics-month", month: "2026-02" }, { kind: "calendar", month: "2026-03", startDate: "2026-02-28" },
-    { kind: "calendar-day", month: "2026-03", day: 1, startDate: "2026-02-28" },
+    { kind: "statistics-month", month: "2026-02" }, { kind: "calendar", destination: "statistics", month: "2026-03", startDate: "2026-02-28" },
+    { kind: "calendar-day", destination: "statistics", month: "2026-03", day: 1, startDate: "2026-02-28" },
     { kind: "history-recent" }, { kind: "history-picker" }, { kind: "history-month", month: "2026-01" },
     { kind: "history-page", fromDate: "2026-01-01", toDate: "9999-12-31", page: Number.MAX_SAFE_INTEGER },
     { kind: "calendar", destination: "history", month: "2026-03", startDate: "2026-02-28" },
@@ -26,13 +26,12 @@ test("callback actions round-trip within Telegram's 64-byte limit", () => {
 
 test("history callbacks reject malformed pages and ranges and enforce the shared 2026 floor", () => {
   for (const data of [
-    "h:202613", "hk:202602:20260229", "ht:202602:0:30", "ht:202602:0:1:extra", "hr:extra",
+    "h:202613", "k:history:202602:20260229", "t:history:202602:0:30", "t:history:202602:0:1:extra", "hr:extra",
     "hp:20260201:20260228:-1", "hp:20260201:20260228:1.5", "hp:20260201:20260228:9007199254740992",
-    "hp:20260229:20260301:0", "hp:20260301:20260228:0", "hp:20260201:20260228:0:extra"
+    "hp:20260229:20260301:0", "hp:20260301:20260228:0", "hp:20260201:20260228:0:extra",
+    "h:202512", "k:history:202512:0", "t:history:202601:20251231:1", "hp:20251231:20260101:0"
   ])
     assert.equal(parseCallbackData(data), undefined, data);
-  for (const data of ["h:202512", "hk:202512:0", "ht:202601:20251231:1", "hp:20251231:20260101:0"])
-    assert.deepEqual(parseCallbackData(data), { kind: "history-year-too-old" }, data);
 });
 
 test("rejects malformed and obsolete expense callbacks", () => {
@@ -42,12 +41,13 @@ test("rejects malformed and obsolete expense callbacks", () => {
 });
 
 test("rejects invalid calendar callback dates and months", () => {
+  assert.equal(parseCallbackData("k:unknown:202602:0"), undefined);
   assert.equal(parseCallbackData("s:202613"), undefined);
-  assert.equal(parseCallbackData("k:202602:20260229"), undefined);
-  assert.equal(parseCallbackData("t:202602:0:30"), undefined);
-  assert.equal(parseCallbackData("t:202602:0:0"), undefined);
+  assert.equal(parseCallbackData("k:statistics:202602:20260229"), undefined);
+  assert.equal(parseCallbackData("t:statistics:202602:0:30"), undefined);
+  assert.equal(parseCallbackData("t:statistics:202602:0:0"), undefined);
   assert.equal(parseCallbackData("s:202602:extra"), undefined);
   assert.deepEqual(parseCallbackData("s:202512"), { kind: "statistics-year-too-old" });
-  assert.deepEqual(parseCallbackData("k:000001:0"), { kind: "statistics-year-too-old" });
-  assert.deepEqual(parseCallbackData("t:202601:20251231:1"), { kind: "statistics-year-too-old" });
+  assert.deepEqual(parseCallbackData("k:statistics:000001:0"), { kind: "statistics-year-too-old" });
+  assert.deepEqual(parseCallbackData("t:statistics:202601:20251231:1"), { kind: "statistics-year-too-old" });
 });

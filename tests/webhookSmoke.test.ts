@@ -53,7 +53,7 @@ test("local webhook smoke covers authentication, expenses, editing, deletion and
   assert.match(String((await lastCall("sendMessage"))?.payload.text), /Последние 10 расходов/);
   await accepted(callback(4041, "h:202601"));
   assert.match(String((await lastCall("editMessageText"))?.payload.text), /Расходы: 2026-01-01 — 2026-01-31/);
-  await accepted(callback(4042, "ht:202602:20260111:15"));
+  await accepted(callback(4042, "t:history:202602:20260111:15"));
   assert.match(String((await lastCall("editMessageText"))?.payload.text), /Расходы: 2026-01-11 — 2026-02-15/);
   await accepted(callback(405, "d:1"));
   assert.match(String((await lastCall("sendMessage"))?.payload.text), /#1 · 2490 RSD/);
@@ -75,8 +75,8 @@ test("local webhook smoke covers authentication, expenses, editing, deletion and
   await accepted(callback(415, "s:202602"));
   assert.match(String((await lastCall("editMessageText"))?.payload.text),
     /Итого: 3700 RSD\nЗдоровье: 3000 RSD \(81,1%\)\nПродукты: 700 RSD \(18,9%\)/);
-  await accepted(callback(416, "t:202602:0:15"));
-  await accepted(callback(417, "t:202602:20260215:28"));
+  await accepted(callback(416, "t:statistics:202602:0:15"));
+  await accepted(callback(417, "t:statistics:202602:20260215:28"));
   assert.match(String((await lastCall("editMessageText"))?.payload.text), /2026-02-15 — 2026-02-28\nИтого: 3700 RSD/);
 
   await accepted(callback(418, "r:2"));

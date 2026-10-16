@@ -19,7 +19,6 @@ const help = "Отправьте расход: 2490 продукты Lidl или
 const invalidRangeText = "Конец периода не может быть раньше начала";
 const statisticsStartText = `Статистика доступна с ${firstStatisticsYear} года.`;
 const oldStatisticsYearText = `${statisticsStartText} Откройте её заново.`;
-const oldHistoryYearText = `История доступна с ${firstStatisticsYear} года. Откройте её заново.`;
 const percentageFormatter = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
 export function createFinanceBot(token: string, repository: D1FinanceRepository, loadSettings: InstanceSettingsLoader) {
@@ -129,8 +128,8 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
         return;
       }
       const userId = String(context.from.id);
-      if (action.kind === "statistics-year-too-old" || action.kind === "history-year-too-old") {
-        acknowledgement = action.kind === "history-year-too-old" ? oldHistoryYearText : oldStatisticsYearText;
+      if (action.kind === "statistics-year-too-old") {
+        acknowledgement = oldStatisticsYearText;
         showAlert = true;
         return;
       }
@@ -147,7 +146,7 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
         await context.editMessageText(view.text, { reply_markup: view.reply_markup });
       } else if (action.kind === "history-picker") {
         const month = getDateInFinanceTimeZone(new Date(), (await loadSettings()).financeTimeZone).slice(0, 7);
-        await context.editMessageText(calendarText(month), { reply_markup: calendarButtons(month, undefined, "history") });
+        await context.editMessageText(calendarText(month), { reply_markup: calendarButtons(month, "history") });
       } else if (action.kind === "history-month") {
         acknowledgement = await showHistoryPeriod(context, repository, userId, getCalendarMonthRange(action.month)!, 0, loadSettings);
       } else if (action.kind === "history-page") {
@@ -160,13 +159,13 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
         await context.editMessageText(statisticsText(result, (await loadSettings()).displayCurrency), { reply_markup: statisticsButtons(action.month) });
       } else if (action.kind === "calendar") {
         await context.editMessageText(calendarText(action.month, action.startDate), {
-          reply_markup: calendarButtons(action.month, action.startDate, action.destination)
+          reply_markup: calendarButtons(action.month, action.destination, action.startDate)
         });
       } else if (action.kind === "calendar-day") {
         const selectedDate = `${action.month}-${String(action.day).padStart(2, "0")}`;
         if (!action.startDate) 
           await context.editMessageText(calendarText(action.month, selectedDate), {
-            reply_markup: calendarButtons(action.month, selectedDate, action.destination)
+            reply_markup: calendarButtons(action.month, action.destination, selectedDate)
           });
         else if (selectedDate < action.startDate) {
           acknowledgement = invalidRangeText;
@@ -179,7 +178,7 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
           if (result.kind !== Result.ExpenseStatistics) 
             return void (acknowledgement = result.kind === Result.AccessDenied ? accessDeniedText(result.telegramUserId) : result.message);
           await context.editMessageText(statisticsText(result, (await loadSettings()).displayCurrency), {
-            reply_markup: new InlineKeyboard().text("Другой период", formatCallbackData({ kind: "calendar", month: action.month }))
+            reply_markup: new InlineKeyboard().text("Другой период", formatCallbackData({ kind: "calendar", month: action.month, destination: "statistics" }))
           });
         }
       } else if (action.kind === "create") {
@@ -243,7 +242,7 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
       showAlert = true;
     } finally {
       const isProblem = !!acknowledgement && ![
-        "Расход сохранён", "Расход удалён", "Расход уже сохранён", invalidRangeText, oldStatisticsYearText, oldHistoryYearText
+        "Расход сохранён", "Расход удалён", "Расход уже сохранён", invalidRangeText, oldStatisticsYearText
       ].includes(acknowledgement);
       if (isProblem && context.chat?.type === "private") {
         try {
@@ -306,7 +305,7 @@ function statisticsText(result: Extract<Awaited<ReturnType<typeof getStatisticsF
 
 function statisticsButtons(month: string): InlineKeyboard {
   const keyboard = addMonthNavigation(new InlineKeyboard(), month, "statistics");
-  return keyboard.row().text("Другой период", formatCallbackData({ kind: "calendar", month }));
+  return keyboard.row().text("Другой период", formatCallbackData({ kind: "calendar", month, destination: "statistics" }));
 }
 
 async function showHistoryPeriod(context: Context, repository: D1FinanceRepository, userId: string, range: DateRange, page: number,

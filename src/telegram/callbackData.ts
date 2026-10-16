@@ -17,8 +17,8 @@ export type BotAction =
   | { kind: "history-picker" }
   | { kind: "history-month"; month: string }
   | { kind: "history-page"; fromDate: string; toDate: string; page: number }
-  | { kind: "calendar"; month: string; startDate?: string; destination?: "history" }
-  | { kind: "calendar-day"; month: string; day: number; startDate?: string; destination?: "history" };
+  | { kind: "calendar"; month: string; startDate?: string; destination: PeriodDestination }
+  | { kind: "calendar-day"; month: string; day: number; startDate?: string; destination: PeriodDestination };
 
 const editFields = ["amount", "date", "comment"] as const;
 
@@ -40,13 +40,11 @@ export function formatCallbackData(action: BotAction): string {
     data = `h:${action.month.replace("-", "")}`;
   else if (action.kind === "history-page")
     data = `hp:${action.fromDate.replaceAll("-", "")}:${action.toDate.replaceAll("-", "")}:${action.page}`;
-  else if (action.kind === "calendar") {
-    const prefix = action.destination === "history" ? "hk" : "k";
-    data = `${prefix}:${action.month.replace("-", "")}:${action.startDate?.replaceAll("-", "") ?? "0"}`;
-  } else if (action.kind === "calendar-day") {
-    const prefix = action.destination === "history" ? "ht" : "t";
-    data = `${prefix}:${action.month.replace("-", "")}:${action.startDate?.replaceAll("-", "") ?? "0"}:${action.day}`;
-  } else if (action.kind === "edit-category")
+  else if (action.kind === "calendar")
+    data = `k:${action.destination}:${action.month.replace("-", "")}:${action.startDate?.replaceAll("-", "") ?? "0"}`;
+  else if (action.kind === "calendar-day")
+    data = `t:${action.destination}:${action.month.replace("-", "")}:${action.startDate?.replaceAll("-", "") ?? "0"}:${action.day}`;
+  else if (action.kind === "edit-category")
     data = `e1:${action.expenseId}:${action.categoryId}`;
   else if (action.kind === "edit-prompt") data = `p:${action.expenseId}:${editFields.indexOf(action.field)}`;
   else data = `${{ details: "d", "category-list": "l", "edit-actions": "a", "delete-request": "r", "delete-confirm": "x" }[action.kind]}:${action.expenseId}`;
@@ -54,7 +52,7 @@ export function formatCallbackData(action: BotAction): string {
   return data;
 }
 
-export function parseCallbackData(data: string): BotAction | { kind: "statistics-year-too-old" } | { kind: "history-year-too-old" } | undefined {
+export function parseCallbackData(data: string): BotAction | { kind: "statistics-year-too-old" } | undefined {
   if (data === "n") return { kind: "calendar-noop" };
   if (data === "hr")
     return { kind: "history-recent" };
@@ -69,34 +67,41 @@ export function parseCallbackData(data: string): BotAction | { kind: "statistics
         || !/^(0|[1-9]\d*)$/.test(parts[3] ?? "") || !Number.isSafeInteger(page))
       return undefined;
     if (Number(fromDate.slice(0, 4)) < firstStatisticsYear)
-      return { kind: "history-year-too-old" };
+      return undefined;
     return { kind: "history-page", fromDate, toDate, page };
   }
-  if (["s", "k", "t", "h", "hk", "ht"].includes(parts[0] ?? "")) {
-    if (!/^\d{4}(0[1-9]|1[0-2])$/.test(parts[1] ?? "")) return undefined;
-    let expectedParts = 4;
-    if (parts[0] === "s" || parts[0] === "h")
-      expectedParts = 2;
-    else if (parts[0] === "k" || parts[0] === "hk")
-      expectedParts = 3;
+  if (["s", "h", "k", "t"].includes(parts[0] ?? "")) {
+    const isMonth = parts[0] === "s" || parts[0] === "h";
+    const monthValue = parts[isMonth ? 1 : 2];
+    if (!/^\d{4}(0[1-9]|1[0-2])$/.test(monthValue ?? ""))
+      return undefined;
+    let expectedParts = isMonth ? 2 : 4;
+    if (parts[0] === "t")
+      expectedParts = 5;
     if (parts.length !== expectedParts)
       return undefined;
-    const destination = parts[0]!.startsWith("h") ? { destination: "history" as const } : {};
-    const oldYearKind = destination.destination === "history" ? "history-year-too-old" : "statistics-year-too-old";
-    const month = `${parts[1]!.slice(0, 4)}-${parts[1]!.slice(4)}`;
+    let destination: PeriodDestination;
+    if (isMonth)
+      destination = parts[0] === "h" ? "history" : "statistics";
+    else if (parts[1] === "history" || parts[1] === "statistics")
+      destination = parts[1];
+    else
+      return undefined;
+    const month = `${monthValue!.slice(0, 4)}-${monthValue!.slice(4)}`;
     if (Number(month.slice(0, 4)) < firstStatisticsYear)
-      return { kind: oldYearKind };
-    if (parts[0] === "s") return { kind: "statistics-month", month };
-    if (parts[0] === "h")
-      return { kind: "history-month", month };
-    if (/^\d{8}$/.test(parts[2] ?? "") && Number(parts[2]!.slice(0, 4)) < firstStatisticsYear)
-      return { kind: oldYearKind };
-    const startDate = parseCompactDate(parts[2]);
-    if (parts[2] !== "0" && (!startDate || !isValidCalendarDate(startDate))) return undefined;
-    if (parts[0] === "k" || parts[0] === "hk")
-      return { kind: "calendar", month, ...destination, ...(startDate ? { startDate } : {}) };
-    if (!/^(?:[1-9]|[12]\d|3[01])$/.test(parts[3] ?? "") || !isValidCalendarDate(`${month}-${parts[3]!.padStart(2, "0")}`)) return undefined;
-    return { kind: "calendar-day", month, day: Number(parts[3]), ...destination, ...(startDate ? { startDate } : {}) };
+      return destination === "statistics" ? { kind: "statistics-year-too-old" } : undefined;
+    if (isMonth)
+      return { kind: destination === "history" ? "history-month" : "statistics-month", month };
+    const startDate = parseCompactDate(parts[3]);
+    if (parts[3] !== "0" && (!startDate || !isValidCalendarDate(startDate)))
+      return undefined;
+    if (startDate && Number(startDate.slice(0, 4)) < firstStatisticsYear)
+      return destination === "statistics" ? { kind: "statistics-year-too-old" } : undefined;
+    if (parts[0] === "k")
+      return { kind: "calendar", month, destination, ...(startDate ? { startDate } : {}) };
+    if (!/^(?:[1-9]|[12]\d|3[01])$/.test(parts[4] ?? "") || !isValidCalendarDate(`${month}-${parts[4]!.padStart(2, "0")}`))
+      return undefined;
+    return { kind: "calendar-day", month, day: Number(parts[4]), destination, ...(startDate ? { startDate } : {}) };
   }
   if (parts[0] === "m1") {
     const operation = parts[1];
