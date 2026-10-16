@@ -52,6 +52,8 @@ export function formatCallbackData(action: BotAction): string {
   return data;
 }
 
+// todo this function is terrible. Hard to understand. 
+// Need to come up with some more structured approach which will be easier to read and maintain.  
 export function parseCallbackData(data: string): BotAction | { kind: "statistics-year-too-old" } | { kind: "history-year-too-old" } | undefined {
   if (data === "n") return { kind: "calendar-noop" };
   if (data === "hr")
