@@ -66,6 +66,143 @@ function inlineKeyboard(calls: TelegramApiCall[], method: "sendMessage" | "editM
   return markup.inline_keyboard;
 }
 
+function buttonData(calls: TelegramApiCall[], method: "sendMessage" | "editMessageText", text: string) {
+  const button = inlineKeyboard(calls, method).flat().find(button => button.text === text);
+  assert(button, `Expected button: ${text}`);
+  return button.callback_data;
+}
+
+// todo tests like this are still terrible to read. We need to come up with more helping stuff (funcs etc) so they are more human readable.
+// I want less braces, less question marks, less strings, I want to be able to follow the scenario easier, more plain english
+// and also comments for stuff that is hard to memorize and is highly non-obvious like h:202601, 
+// and describing actions of the scenario just before they start
+test("period history reaches older expenses, keeps its range while paging, and supports details, editing and deletion", async context => {
+  const fixture = await createTelegramFixture(127, 999, createSettings({ displayCurrency: "EUR" }));
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, 127, "Анна", 1);
+  await addMember(fixture.database.DB, 128, "Борис", 1);
+  for (let index = 1; index <= 11; index++)
+    expectRepositorySuccess(await fixture.repository.createExpense({
+      sourceActionKey: `history:${index}`, amountRsd: index * 100, categoryId: "groceries", spentOn: "2026-01-15", createdBy: "128"
+    }));
+  expectRepositorySuccess(await fixture.repository.setCategoryActive("groceries", false));
+  await fixture.bot.handleUpdate(fixture.message(800, "История"));
+  const recent = inlineKeyboard(fixture.calls, "sendMessage");
+  assert.equal(recent[0]?.[0]?.text, "Другой период");
+  assert.equal(recent.flat().filter(button => parseCallbackData(button.callback_data)?.kind === "details").length, 10);
+  assert(!recent.flat().some(button => button.callback_data === "d:1")); // todo a comment here would be nice as to what this checks
+
+  await fixture.bot.handleUpdate(fixture.callback(801, "h:202601")); // todo a comment here would be nice
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /2026-01-01 — 2026-01-31\nСтраница 1/);
+  const first = inlineKeyboard(fixture.calls, "editMessageText");
+  assert.equal(first[0]?.[0]?.text, "Другой период");
+  assert(first.flat().some(button => /1100 EUR.*Продукты.*15\.01\.2026/.test(button.text)));
+  assert(!first.flat().some(button => /Предыдущий месяц/.test(button.text)));
+  const next = buttonData(fixture.calls, "editMessageText", "Далее");
+  assert.deepEqual(parseCallbackData(next), { kind: "history-page", fromDate: "2026-01-01", toDate: "2026-01-31", page: 1 });
+  await fixture.bot.handleUpdate(fixture.callback(802, next));
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /Страница 2/);
+  const older = inlineKeyboard(fixture.calls, "editMessageText").flat().filter(button => button.callback_data === "d:1");
+  assert.equal(older.length, 1);
+  assert(!inlineKeyboard(fixture.calls, "editMessageText").flat().some(button => button.text === "Далее"));
+  await fixture.bot.handleUpdate(fixture.callback(8021, buttonData(fixture.calls, "editMessageText", "Назад")));
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /Страница 1/);
+  await fixture.bot.handleUpdate(fixture.callback(8022, buttonData(fixture.calls, "editMessageText", "Далее")));
+  await fixture.bot.handleUpdate(fixture.callback(803, older[0]!.callback_data));
+  assert.match(String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text), /#1 · 100 EUR.*Борис/);
+  await fixture.bot.handleUpdate(fixture.callback(804, buttonData(fixture.calls, "sendMessage", "Дата")));
+  const prompt = String(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text);
+  await fixture.bot.handleUpdate(fixture.message(805, "01.02.2026", { replyTo: fixture.replyTarget(prompt, fixture.botInfo) }));
+  assert.equal((await fixture.repository.getExpenseById(1))?.spentOn, "2026-02-01");
+  await fixture.bot.handleUpdate(fixture.callback(806, next));
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /Страница 1/);
+  assert(!inlineKeyboard(fixture.calls, "editMessageText").flat().some(button => button.text === "Далее"));
+
+  await fixture.bot.handleUpdate(fixture.callback(807, "h:202602"));
+  await fixture.bot.handleUpdate(fixture.callback(808, "d:1"));
+  await fixture.bot.handleUpdate(fixture.callback(809, buttonData(fixture.calls, "sendMessage", "Удалить")));
+  await fixture.bot.handleUpdate(fixture.callback(810, buttonData(fixture.calls, "sendMessage", "Да, удалить")));
+  assert.equal(await fixture.repository.getExpenseById(1), null);
+  await fixture.bot.handleUpdate(fixture.callback(811, "h:202602"));
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /За выбранный период расходов нет\./);
+  await fixture.bot.handleUpdate(fixture.callback(812, buttonData(fixture.calls, "editMessageText", "Последние 10")));
+  assert.equal(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text, "Последние 10 расходов:");
+});
+
+test("history calendar keeps a cross-month start, resets it, rejects reversed ranges and returns expenses rather than statistics", async context => {
+  const fixture = await createTelegramFixture(127, 999, createSettings());
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, 127, "Анна", 1);
+  for (const spentOn of ["2026-02-27", "2026-02-28", "2026-03-01", "2026-03-02"])
+    expectRepositorySuccess(await fixture.repository.createExpense({
+      sourceActionKey: spentOn, amountRsd: 100, categoryId: "groceries", spentOn, createdBy: "127"
+    }));
+  const before = await fixture.database.DB.prepare("SELECT * FROM expenses ORDER BY id").many();
+  await fixture.bot.handleUpdate(fixture.callback(820, "k:history:202602:0"));
+  await fixture.bot.handleUpdate(fixture.callback(821, buttonData(fixture.calls, "editMessageText", "28")));
+  const reset = buttonData(fixture.calls, "editMessageText", "Сбросить начало");
+  assert.deepEqual(parseCallbackData(reset), { kind: "calendar", month: "2026-02", destination: "history" });
+  await fixture.bot.handleUpdate(fixture.callback(822, buttonData(fixture.calls, "editMessageText", "27")));
+  assert.equal(fixture.calls.at(-1)?.payload.text, "Конец периода не может быть раньше начала");
+  const nextMonth = buttonData(fixture.calls, "editMessageText", "▶");
+  assert.deepEqual(parseCallbackData(nextMonth), { kind: "calendar", month: "2026-03", startDate: "2026-02-28", destination: "history" });
+  await fixture.bot.handleUpdate(fixture.callback(823, nextMonth));
+  await fixture.bot.handleUpdate(fixture.callback(824, buttonData(fixture.calls, "editMessageText", "1")));
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /Расходы: 2026-02-28 — 2026-03-01/);
+  assert.deepEqual(inlineKeyboard(fixture.calls, "editMessageText").flat().filter(button => /^d:/.test(button.callback_data))
+    .map(button => button.callback_data), ["d:3", "d:2"]);
+  await fixture.bot.handleUpdate(fixture.callback(825, buttonData(fixture.calls, "editMessageText", "Другой период")));
+  await fixture.bot.handleUpdate(fixture.callback(826, buttonData(fixture.calls, "editMessageText", "28")));
+  await fixture.bot.handleUpdate(fixture.callback(827, buttonData(fixture.calls, "editMessageText", "[28]")));
+  assert.deepEqual(inlineKeyboard(fixture.calls, "editMessageText").flat().filter(button => /^d:/.test(button.callback_data))
+    .map(button => button.callback_data), ["d:2"]);
+  await fixture.bot.handleUpdate(fixture.callback(828, reset));
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /Выберите начало периода/);
+  assert(!inlineKeyboard(fixture.calls, "editMessageText").flat().some(button => button.text === "Сбросить начало"));
+  await fixture.bot.handleUpdate(fixture.callback(829, "k:history:202601:0"));
+  assert(!inlineKeyboard(fixture.calls, "editMessageText").flat().some(button => button.text === "◀"));
+  await fixture.bot.handleUpdate(fixture.callback(830, "t:history:202601:20251231:1"));
+  assert.equal(fixture.calls.at(-1)?.payload.text, "История доступна с 2026 года. Откройте её заново.");
+  assert.equal(fixture.calls.at(-1)?.payload.show_alert, true);
+  await fixture.bot.handleUpdate(fixture.callback(831, "s:202602"));
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /Итого: 200 RSD/);
+  assert.deepEqual(await fixture.database.DB.prepare("SELECT * FROM expenses ORDER BY id").many(), before);
+});
+
+test("empty history offers a picker in the configured current month and full-month selection", async context => {
+  const fixture = await createTelegramFixture(127, 999, createSettings({ financeTimeZone: "America/New_York" }));
+  context.after(() => fixture.database.dispose());
+  await addMember(fixture.database.DB, 127, "Анна", 1);
+  context.mock.timers.enable({ apis: ["Date"], now: new Date("2026-03-01T00:30:00Z") });
+  await fixture.bot.handleUpdate(fixture.message(840, "История"));
+  assert.equal(fixture.calls.findLast(call => call.method === "sendMessage")?.payload.text, "Расходов пока нет.");
+  await fixture.bot.handleUpdate(fixture.callback(841, buttonData(fixture.calls, "sendMessage", "Другой период")));
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /^2026-02/);
+  await fixture.bot.handleUpdate(fixture.callback(842, buttonData(fixture.calls, "editMessageText", "Весь месяц")));
+  assert.equal(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text,
+    "Расходы: 2026-02-01 — 2026-02-28\nЗа выбранный период расходов нет.");
+  await fixture.bot.handleUpdate(fixture.callback(843, buttonData(fixture.calls, "editMessageText", "Следующий месяц ▶")));
+  assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /2026-03-01 — 2026-03-31/);
+  assert.equal(buttonData(fixture.calls, "editMessageText", "Последние 10"), "hr");
+  assert(buttonData(fixture.calls, "editMessageText", "Другой период"));
+});
+
+test("unknown and disabled members cannot use history month, calendar, page or return buttons", async context => {
+  const fixture = await createTelegramFixture(127, 999, createSettings());
+  context.after(() => fixture.database.dispose());
+  const callbacks = ["hi", "hr", "h:202601", "k:history:202601:0", "t:history:202601:0:1", "hp:20260101:20260131:1", "d:1"];
+  for (const enabled of [undefined, 0]) {
+    if (enabled === 0)
+      await addMember(fixture.database.DB, 127, "Анна", enabled);
+    for (const data of callbacks) {
+      fixture.calls.length = 0;
+      await fixture.bot.handleUpdate(fixture.callback(850, data));
+      assert(!fixture.calls.some(call => call.method === "editMessageText"), data);
+      assert.equal(fixture.calls.at(-1)?.payload.text, "Нет доступа. Ваш Telegram ID: 127", data);
+    }
+  }
+});
+
 test("January 2026 has no previous-month button and old buttons explain the limit", async context => {
   const userId = 127;
   const fixture = await createTelegramFixture(userId, 999, createSettings());
@@ -74,7 +211,7 @@ test("January 2026 has no previous-month button and old buttons explain the limi
   await fixture.bot.handleUpdate(fixture.callback(710, formatCallbackData({ kind: "statistics-month", month: "2026-01" })));
   const buttons = inlineKeyboard(fixture.calls, "editMessageText");
   assert.deepEqual(buttons.flat().map(button => parseCallbackData(button.callback_data)), [
-    { kind: "statistics-month", month: "2026-02" }, { kind: "calendar", month: "2026-01" }
+    { kind: "statistics-month", month: "2026-02" }, { kind: "calendar", destination: "statistics", month: "2026-01" }
   ]);
   await fixture.bot.handleUpdate(fixture.callback(711, "s:202512"));
   assert.equal(fixture.calls.at(-1)?.method, "answerCallbackQuery");
@@ -103,7 +240,7 @@ test("monthly statistics displays family totals and percentages in the configure
   assert.match(report, /2026-02-01 — 2026-02-28\nИтого: 4500 EUR\nПродукты: 3000 EUR \(66,7%\)\nТранспорт: 1500 EUR \(33,3%\)/);
   const reportButtons = inlineKeyboard(fixture.calls, "editMessageText");
   assert.deepEqual(reportButtons.flat().map(button => parseCallbackData(button.callback_data)), [
-    { kind: "statistics-month", month: "2026-01" }, { kind: "statistics-month", month: "2026-03" }, { kind: "calendar", month }
+    { kind: "statistics-month", month: "2026-01" }, { kind: "statistics-month", month: "2026-03" }, { kind: "calendar", destination: "statistics", month }
   ]);
 });
 
@@ -113,7 +250,7 @@ test("calendar placeholder acknowledges a tap without editing the message", asyn
   const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
-  await fixture.bot.handleUpdate(fixture.callback(701, formatCallbackData({ kind: "calendar", month })));
+  await fixture.bot.handleUpdate(fixture.callback(701, formatCallbackData({ kind: "calendar", destination: "statistics", month })));
   const calendarButtons = inlineKeyboard(fixture.calls, "editMessageText");
   const placeholder = calendarButtons.flat().find(button => button.text === "·");
   assert(placeholder);
@@ -130,10 +267,10 @@ test("calendar rejects an end date before the selected start", async context => 
   const fixture = await createTelegramFixture(userId, 999, createSettings());
   context.after(() => fixture.database.dispose());
   await addMember(fixture.database.DB, userId, "Анна", 1);
-  await fixture.bot.handleUpdate(fixture.callback(701, formatCallbackData({ kind: "calendar", month })));
-  await fixture.bot.handleUpdate(fixture.callback(702, formatCallbackData({ kind: "calendar-day", month, day: 15 })));
+  await fixture.bot.handleUpdate(fixture.callback(701, formatCallbackData({ kind: "calendar", destination: "statistics", month })));
+  await fixture.bot.handleUpdate(fixture.callback(702, formatCallbackData({ kind: "calendar-day", destination: "statistics", month, day: 15 })));
   assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /Начало: 2026-02-15/);
-  await fixture.bot.handleUpdate(fixture.callback(703, formatCallbackData({ kind: "calendar-day", month, day: 14, startDate: "2026-02-15" })));
+  await fixture.bot.handleUpdate(fixture.callback(703, formatCallbackData({ kind: "calendar-day", destination: "statistics", month, day: 14, startDate: "2026-02-15" })));
   assert.equal(fixture.calls.filter(call => call.method === "editMessageText").length, 2);
   assert.match(String(fixture.calls.at(-1)?.payload.text), /Конец периода не может быть раньше начала/);
   assert.equal(fixture.calls.at(-1)?.payload.show_alert, true);
@@ -158,16 +295,16 @@ test("calendar keeps the start date across months and includes both range bounda
   expectRepositorySuccess(await fixture.repository.createExpense({
     sourceActionKey: "after", amountRsd: 3000, categoryId: "other", spentOn: "2026-03-02", createdBy: String(userId) }));
 
-  await fixture.bot.handleUpdate(fixture.callback(701, formatCallbackData({ kind: "calendar", month: "2026-02" })));
-  await fixture.bot.handleUpdate(fixture.callback(702, formatCallbackData({ kind: "calendar-day", month: "2026-02", day: 15 })));
+  await fixture.bot.handleUpdate(fixture.callback(701, formatCallbackData({ kind: "calendar", destination: "statistics", month: "2026-02" })));
+  await fixture.bot.handleUpdate(fixture.callback(702, formatCallbackData({ kind: "calendar-day", destination: "statistics", month: "2026-02", day: 15 })));
   const nextMonthButton = inlineKeyboard(fixture.calls, "editMessageText")[0]?.find(button => button.text === "▶");
   assert(nextMonthButton);
-  assert.deepEqual(parseCallbackData(nextMonthButton.callback_data), { kind: "calendar", month: "2026-03", startDate });
+  assert.deepEqual(parseCallbackData(nextMonthButton.callback_data), { kind: "calendar", destination: "statistics", month: "2026-03", startDate });
   await fixture.bot.handleUpdate(fixture.callback(704, nextMonthButton.callback_data));
   assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /Начало: 2026-02-15/);
   const firstDayButton = inlineKeyboard(fixture.calls, "editMessageText").flat().find(button => button.text === "1");
   assert(firstDayButton);
-  assert.deepEqual(parseCallbackData(firstDayButton.callback_data), { kind: "calendar-day", month: "2026-03", day: 1, startDate });
+  assert.deepEqual(parseCallbackData(firstDayButton.callback_data), { kind: "calendar-day", destination: "statistics", month: "2026-03", day: 1, startDate });
   await fixture.bot.handleUpdate(fixture.callback(705, firstDayButton.callback_data));
   assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text),
     /2026-02-15 — 2026-03-01\nИтого: 12500 RSD\nДругое: 9000 RSD \(72%\)\nПродукты: 2000 RSD \(16%\)\nТранспорт: 1500 RSD \(12%\)/);
@@ -238,8 +375,9 @@ test("history shows one button per recent expense", async context => {
 
   await fixture.bot.handleUpdate(fixture.message(402, "История"));
   const buttons = inlineKeyboard(fixture.calls, "sendMessage");
-  assert.equal(buttons.length, 2);
-  assert.deepEqual(buttons.map(row => row[0]?.text), ["#2 · 700 EUR · Транспорт · 18.09.2026", "#1 · 2490 EUR · Продукты · 17.09.2026"]);
+  assert.deepEqual(buttons.map(row => row[0]?.text), [
+    "Другой период", "#2 · 700 EUR · Транспорт · 18.09.2026", "#1 · 2490 EUR · Продукты · 17.09.2026"
+  ]);
 });
 
 test("expense details keep categories behind a button and can return from the category list", async context => {

@@ -8,8 +8,19 @@
 - Permission for a local build does not authorize deployment or remote database operations. Local tests using temporary databases and simulated services are allowed.
 - Keep local checks offline where possible; disable optional telemetry and update checks rather than treating permission for local checks as permission to access internet resources.
 
+## Telegram button compatibility
+
+- For new work or changes to button formats, do not implement compatibility with previously sent buttons or old `callback_data` formats by default.
+  Add backward compatibility only when the user explicitly requests it in their task.
+
 ## Tests
 
+- During implementation iterations and PR review, run only tests directly related to the changes made. Select individual tests or
+  the smallest relevant test files; do not run unrelated tests.
+- Run the full regression suite only for final task verification or after substantial changes spanning multiple layers.
+  A small review fix, a test-file edit, a commit, a push, or a reply to the user is not a reason to repeat the full suite.
+  While the PR remains under review, use targeted tests for follow-up fixes rather than treating each fix as final task verification.
+- For documentation-only changes, do not run application tests; review the diff and run appropriate document checks instead.
 - Keep the suite easy to read, small, and useful for this project's actual risks. Prioritize protection against lost or incorrect financial data,
   duplicate writes, and unauthorized access. Match testing effort to failure consequences and maintenance cost; avoid numerical test or coverage quotas.
 - Add a test when it protects a meaningful requirement or catches a credible bug that existing tests do not already cover.
@@ -51,14 +62,16 @@
 - Reassess existing tests rather than preserving them automatically. Delete or merge redundant tests when surviving cases protect the same meaningful behavior.
   A low-value test may be removed without replacement when its protection does not justify its maintenance cost; explain the specific tradeoff.
   Preserve useful known-bug scenarios, and explain unusual inputs in the test name or a short comment.
-- Run affected tests during editing, then the complete suite and relevant checks after test changes. When fixture lifecycle or shared state changes,
-  also verify tests individually and together and check for execution-order dependencies. Distinguish pre-existing failures from new regressions.
+- When fixture lifecycle or shared state changes, verify the affected tests individually and together and check for execution-order dependencies.
+  Keep the run scoped to the affected tests unless the full-suite conditions above apply. Distinguish pre-existing failures from new regressions.
   Do not hide failures by skipping required scenarios, weakening meaningful assertions, or reducing default test discovery.
 - Summarize meaningful coverage retained or intentionally dropped and checks performed. Explain removed coverage rather than requiring a mapping for every test.
   Treat line and branch coverage as aids for finding gaps, not proof of test value or completeness.
 
 ## Code style
 
+- If a list of array elements, object or type fields, or similar items spans three or more lines, put each item on its own line.
+  Do not group multiple items on the same line in such lists.
 - Do not use nested ternary expressions. When conditional expressions become nested, replace them with `if`, `switch`, or another clear control flow.
 
 - In new code, place the body of every `if` on the next line, even when it contains only one statement. Braces are optional for a single statement.

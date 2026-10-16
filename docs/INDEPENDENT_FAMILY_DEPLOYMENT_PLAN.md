@@ -3,7 +3,8 @@
 Status: P0 implemented and locally verified on October 11, 2026. P1 fully completed:
 the owner confirmed live verification in demo and production on October 13, 2026. P2/P3 bot-side support is complete
 and merged; the owner confirmed live verification in demo and production on October 15, 2026.
-P4 (expense history by period) is planned for documentation review before implementation; complete it before resuming installer work.
+P4 (expense history by period) is complete: the owner confirmed release and live verification on October 16, 2026.
+The documentation was approved in PR #5; implementation is in PR #6. See [P4 verification](HISTORY_BROWSING.md).
 Installer phases remain pending.
 The subsequent P1 repository-result refactor passed 83/83 tests on October 12, 2026. After removing nested ternaries,
 three focused tests, the type check, and the dry-run build passed. Local tests/check/build are authorized;
@@ -346,43 +347,45 @@ independent-account rehearsal is accepted.
 
 ### Task P4: Browse expense history by month or arbitrary period
 
-Status: planned, not implemented. This documentation change must be reviewed and approved by the owner before implementation.
-P4 is the next product prerequisite after the completed bot-side P2/P3 work; finish it before continuing independent-family installer work.
+Status: complete. After approving the documentation in PR #5, the owner released P4 and confirmed live verification
+on the existing bot on October 16, 2026. Implementation: PR #6. The agent performed no remote Cloudflare operations or deployment.
+See [history behavior and verification scenarios](HISTORY_BROWSING.md).
 
-- [ ] Keep **История** as the entry point and show the latest 10 expenses by default, preserving the current newest-ID-first order,
+- [x] Keep **История** as the entry point and show the latest 10 expenses by default, preserving the current newest-ID-first order,
   date, amount, configured display currency, category name, and buttons opening expense details.
-- [ ] Put **Другой период** in the first inline-keyboard row, above the expense buttons. Keep it available for an empty list too.
+- [x] Put **Другой период** in the first inline-keyboard row, above the expense buttons. Keep it available for an empty list too.
   Provide **Последние 10** from period views to return to the default history.
-- [ ] Reuse the statistics interface for period selection: **Предыдущий месяц** / **Следующий месяц** browse full calendar months,
+- [x] Reuse the statistics interface for period selection: **Предыдущий месяц** / **Следующий месяц** browse full calendar months,
   and **Другой период** opens the existing day calendar. Start the picker in the current month determined by `finance_time_zone`;
   allow that full month to be selected without choosing its first and last days individually.
-- [ ] Reuse the calendar's two-click range selection: first choose the start day, then the end day. Preserve the selected start
+- [x] Reuse the calendar's two-click range selection: first choose the start day, then the end day. Preserve the selected start
   while navigating between months, allow resetting it, accept a single-day range, and reject an end before the start with the
   same explanation as statistics. Show the chosen range in the history heading; show a clear empty-period message with navigation.
-- [ ] Filter by stored `expenses.spent_on`, including both selected boundary dates, just like statistics. Do not filter by creation
+- [x] Filter by stored `expenses.spent_on`, including both selected boundary dates, just like statistics. Do not filter by creation
   timestamps or reinterpret stored dates through a timezone. Include both members' expenses and archived-category expenses.
   Use the same `firstStatisticsYear = 2026` lower bound as statistics: the earliest selectable history date is January 1, 2026.
   Month navigation and custom ranges must not allow dates before this boundary. Preserve the existing statistics behavior.
-- [ ] Make every expense in a selected period reachable with pages of at most 10 records and **Назад** / **Далее** controls.
+- [x] Make every expense in a selected period reachable with pages of at most 10 records and **Назад** / **Далее** controls.
   Preserve the period when paging and order by descending expense ID, as in the default history, so ties in `spent_on` are unambiguous.
   Reset to the first page when changing the period; do not silently truncate a period to its latest 10 records or send an unbounded list.
   Reload matching records from current data on each page transition: another member may have deleted an expense or changed its date
   so it no longer belongs to this period. If the requested page has no records, show the nearest preceding nonempty page instead.
   If no expenses remain in the entire period, show **За выбранный период расходов нет.** with **Другой период** and **Последние 10**.
   Do not display an empty page as a separate screen.
-- [ ] Reuse the date-range helpers, month navigation, and calendar rendering from statistics instead of maintaining a second calendar.
+- [x] Reuse the date-range helpers, month navigation, and calendar rendering from statistics instead of maintaining a second calendar.
   Carry an explicit history/statistics destination in callbacks so selecting a day in history returns an expense list and selecting
-  it in statistics still returns totals. Preserve already-sent statistics buttons and the Telegram 64-byte callback-data limit.
+  it in statistics still returns totals. Use one current calendar callback format with a required history/statistics destination;
+  do not support previously sent calendar buttons. Keep the Telegram 64-byte callback-data limit.
   Keep selections in callback data using the existing stateless approach; no server-side conversation store is needed.
-- [ ] Apply the existing enabled-member access check to every new calendar, month, page, and details action. Preserve expense
+- [x] Apply the existing enabled-member access check to every new calendar, month, page, and details action. Preserve expense
   details/edit/delete behavior for records opened from period history, including records older than the default latest 10.
   Browsing history must not modify expenses, categories, settings, or source action keys; no schema migration is expected.
-- [ ] Add focused repository/application coverage for inclusive range boundaries and a period spanning more than 10 records,
+- [x] Add focused repository/application coverage for inclusive range boundaries and a period spanning more than 10 records,
   including archived categories. Add Telegram journey coverage for monthly browsing, a cross-month custom range, pagination,
   empty results, returning to **Последние 10**, and denied access. Verify history/statistics callback routing and retain existing
   statistics behavior and the shared January 1, 2026 lower bound in month navigation and custom ranges.
   Run the affected tests, full regression suite, type check, and Worker dry-run build.
-- [ ] Provide a short owner verification scenario: open **История**, choose a month containing more than 10 expenses, reach an
+- [x] Provide a short owner verification scenario: open **История**, choose a month containing more than 10 expenses, reach an
   older expense on the next page and open its details, select a cross-month day range, then return to **Последние 10**.
   Verify a single-day and an empty period, and check that **Статистика** still calculates the same periods and totals.
   Record local verification separately from owner-authorized deployment and live Telegram acceptance on the existing bot.
@@ -390,7 +393,19 @@ P4 is the next product prerequisite after the completed bot-side P2/P3 work; fin
 Acceptance: either enabled member can reach any stored expense dated January 1, 2026 or later through monthly or custom-period
 history, including records outside the latest 10, without changing financial data. Period boundaries agree with statistics, navigation remains available
 for empty results, and the existing statistics and expense details/edit/delete journeys still work.
-Complete local checks and owner-confirmed live acceptance on the existing bot before resuming the installer phases.
+
+- [x] Owner-approved documentation before implementation (PR #5).
+- [x] Local automated verification; see the verification record below.
+- [x] Owner-run release and owner-confirmed live acceptance on the existing bot (October 16, 2026).
+
+P4 has no remaining release or acceptance steps. Installer work in Section 6 may resume; its tasks remain pending.
+
+P4 local verification (October 16, 2026): `npm test` passed 101/101 tests, including the local Worker/webhook journey,
+settings behavior, local D1 migration upgrade, history pagination and existing statistics checks. `npm run check` and
+`npm run build` (Worker dry run) passed. The new repository behavior test first failed before implementation and passed afterward.
+The history keyboard regression caught and led to removal of an extra empty row. No existing tests were removed.
+In the managed environment, local test sockets required sandbox network permission; Wrangler build logs/config were directed
+to `/tmp` because the default home configuration directory was unavailable. No remote Cloudflare operations or deployment were performed.
 
 ## 4. Owner journeys
 
@@ -838,11 +853,12 @@ Stay on Free unless measurements justify an explicit owner-approved upgrade. Rec
 - [ ] New expense dates and relative-period boundaries follow the selected zone; that zone survives an update.
 - [ ] Both settings live in one D1 row in existing and new databases; missing/invalid values fail health and block settings-dependent expense writes.
 - [x] Settings changes take effect without Worker deployment (owner-verified in demo and production on October 15, 2026).
-- [ ] P4 documentation is owner-approved before implementation, and P4 is complete before installer work resumes.
-- [ ] History defaults to the latest 10 and offers month/custom-period selection above the expense list.
-- [ ] History uses the same earliest selectable year, 2026, as statistics for both month navigation and custom ranges.
-- [ ] All expenses in a chosen period are reachable through pagination, including archived-category expenses and records outside the latest 10.
-- [ ] Inclusive date boundaries, empty periods, access checks, and unchanged statistics/details/edit/delete flows are verified locally and live.
+- [x] P4 documentation was owner-approved before implementation; release and live acceptance are complete (October 16, 2026).
+- [x] History defaults to the latest 10 and offers month/custom-period selection above the expense list (locally verified).
+- [x] History uses the same earliest selectable year, 2026, as statistics for both month navigation and custom ranges (locally verified).
+- [x] All expenses in a chosen period are reachable through pagination, including archived-category expenses and records outside the latest 10 (locally verified).
+- [x] Inclusive date boundaries, empty periods, access checks, and unchanged statistics/details/edit/delete flows are verified locally and live
+  (owner confirmation, October 16, 2026).
 - [ ] A clean Windows x64 environment can run the delivered package without developer tools or manual commands.
 - [ ] The owner creates a bot and authorizes Cloudflare; all resource setup happens through the wizard.
 - [ ] Two enabled participants can use the existing finance journeys; unknown users are denied.
