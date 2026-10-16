@@ -5,7 +5,7 @@ the owner confirmed live verification in demo and production on October 13, 2026
 and merged; the owner confirmed live verification in demo and production on October 15, 2026.
 P4 (expense history by period) is complete: the owner confirmed release and live verification on October 16, 2026.
 The documentation was approved in PR #5; implementation is in PR #6. See [P4 verification](HISTORY_BROWSING.md).
-Installer phases remain pending.
+Installer Task 1 is complete with owner-confirmed verification on October 17, 2026; installer Tasks 2-6 remain pending.
 The subsequent P1 repository-result refactor passed 83/83 tests on October 12, 2026. After removing nested ternaries,
 three focused tests, the type check, and the dry-run build passed. Local tests/check/build are authorized;
 commands accessing remote resources require an explicit owner decision.
@@ -14,8 +14,8 @@ obsolete category-index callbacks are rejected without a legacy ID snapshot. 89/
 Repository inspection and provider documentation review: October 10, 2026.
 
 This document is a standalone implementation handoff. Checked boxes describe completed work; unchecked boxes describe future work.
-Installer packaging and the customer update flow remain unverified. Owner-run disposable separate-account provider checks
-are recorded under Task 1; the full manual finance journey on that instance remains pending.
+Installer packaging and the customer update flow remain unverified. Installer Task 1 is complete:
+owner-run disposable separate-account provider checks and the manual finance journey are recorded below.
 
 ## How to read and implement this plan
 
@@ -546,12 +546,13 @@ Provider verification (October 17, 2026): see [toolchain proof and owner-run res
 The owner verified the offline probe and live operations on Windows Node 24.13.0, PowerShell 5.1.26100.9711,
 and pinned Wrangler 4.133.0 using a disposable bot and separate Cloudflare account.
 OAuth isolation, migrations/retry, parameter-bound settings writes, deploy/redeploy, secret preservation,
-and release/binding/migration readback passed. Task 1 remains open for the manual recipe's enabled-member expense journey;
-the bot's access-denied response alone does not verify that journey. Windows packaging remains Task 2 work.
+and release/binding/migration readback passed. The owner also confirmed participant enrollment and expense
+create/edit/delete with history/statistics; final D1 readback showed zero expenses, one enabled member,
+and preserved GBP/Europe/London settings. Task 1 is complete. Windows packaging remains Task 2 work.
 
 - [x] Read the referenced provider documentation and inspect the pinned Wrangler CLI's actual help.
-- [ ] Reproduce the existing manual deployment recipe using a disposable bot and a separate test Cloudflare account.
-  Infrastructure, webhook, and denied-member delivery passed; participant enrollment and expense create/edit/delete remain pending.
+- [x] Reproduce the existing manual deployment recipe using a disposable bot and a separate test Cloudflare account.
+  Infrastructure, webhook, denied/enabled-member delivery, and expense create/edit/delete passed; final D1 state was verified.
 - [x] Verify OAuth login, account enumeration, explicit account selection, database creation, migrations, secrets,
   creation/read/update of the one-row D1 settings table, and Worker deployment.
 - [x] Choose a supported way to isolate/select Wrangler credentials. Named profiles are currently documented as experimental:

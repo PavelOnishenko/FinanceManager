@@ -3,10 +3,10 @@
 Подготовлено 16 октября, обновлено 17 октября 2026 года.
 Основа: раздел 6 [плана независимого развёртывания](INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md).
 
-**Статус: основные операции провайдеров подтверждены владельцем на Windows и отдельном аккаунте Cloudflare.**
+**Статус: Task 1 завершена; проверки подтверждены владельцем 17 октября 2026 года на Windows и отдельном аккаунте Cloudflare.**
 Проверены OAuth, отказ доступа к рабочему аккаунту из тестового профиля, D1, миграции, настройки, secrets,
-deploy/redeploy, Telegram webhook и чтение состояния после нового запуска. Остаток полного ручного сценария —
-включение участника и создание/редактирование/удаление тестового расхода — ещё не выполнен; Task 1 целиком пока не закрыта.
+deploy/redeploy, Telegram webhook и чтение состояния после нового запуска. Включение участника,
+создание/редактирование/удаление тестового расхода, история и статистика также проверены.
 Инсталлятора и готового Windows ZIP нет. Удалённые команды выполнял владелец у себя; агент изучал документацию
 и код, готовил команды и проверял присланные результаты. Секреты разработчику не передавались.
 
@@ -147,7 +147,7 @@ node scripts/probe-installer-toolchain.mjs /workspace/work/installer-task1-repea
 | Миграции | `W d1 migrations apply <database-name> --remote`, затем `W d1 migrations list <database-name> --remote` | Применились пять файлов; повторный apply/list сообщает отсутствие pending. Неинтерактивный remote apply отдельно не проверялся |
 | История миграций | `W d1 execute DB --remote --json --command "SELECT name FROM d1_migrations ORDER BY id"` | Сверить полную последовательность имён, а не только отсутствие pending |
 | Чтение настроек | `W d1 execute DB --remote --json --command "SELECT id, display_currency, finance_time_zone FROM instance_settings"` | Ровно строка id=1; валидировать оба значения |
-| Запись настроек | D1 REST query: `POST /accounts/{account_id}/d1/database/{database_id}/query` | `{sql, params}` с `?` подтвердили запись `GBP` / `Europe/London` и обратное чтение; запись участников ещё не выполнялась |
+| Запись настроек и участника | D1 REST query: `POST /accounts/{account_id}/d1/database/{database_id}/query` | `{sql, params}` с `?` подтвердили запись настроек и включённого участника отдельным SELECT |
 | Размещение Worker | `W deploy --dry-run --outdir=<instance-dir>/bundle`, затем `W deploy --no-bundle` | Сборка и размещение успешны; перед deploy `main` изменён на `bundle/index.js` |
 | Секреты | `W secret put TELEGRAM_BOT_TOKEN`, аналогично `TELEGRAM_WEBHOOK_SECRET` | Оба установлены через stdin из переменных PowerShell, без значений в argv |
 | Имена секретов | `W secret list --format json --name <worker-name>` | Оба имени сохранились после redeploy; работоспособность значений подтверждена ответом бота |
@@ -211,11 +211,16 @@ Cloudflare version UUID не равен номеру релиза приложе
 9. Из нового каталога восстановлены версия, bindings, настройки и история. Первый запрос имел пустой `account_id`:
    Wrangler проигнорировал его и выбрал аккаунт через профиль. После проверки формата и заполнения ID чтение повторено без предупреждения.
 10. REST UPDATE с `params` изменил настройки на `GBP` / `Europe/London`; отдельный REST SELECT подтвердил строку id=1.
+11. Владелец добавил тестового участника параметризованным REST INSERT и отдельным SELECT подтвердил
+    `display_name=Task1 Test`, `enabled=1`. Для повторного запуска использован `ON CONFLICT(telegram_user_id) DO NOTHING`.
+12. Владелец подтвердил разрешённый сценарий в тестовом боте: `/start`, расход 123 GBP в категории «Продукты»,
+    проверка истории/статистики, изменение суммы на 234 GBP и удаление с проверкой истории/статистики.
+13. Финальный SELECT из D1 подтвердил `expenses=0`, `enabled_members=1` и неизменную строку
+    `id=1`, `display_currency=GBP`, `finance_time_zone=Europe/London`.
 
-**Оставшийся пункт Task 1:** полное воспроизведение последней части `TEST_ENVIRONMENT.md` — включить тестового участника,
-создать расход, проверить историю/статистику, изменить и удалить расход. Сейчас подтверждена доставка Telegram
-и проверка доступа, но не полный разрешённый финансовый сценарий на одноразовом экземпляре.
-Его нельзя отмечать выполненным по одному ответу «Нет доступа».
+**Acceptance Task 1 выполнен:** одноразовый экземпляр в отдельном аккаунте работает и пережил redeploy;
+секреты, настройки и история миграций сохранились, разрешённый финансовый сценарий подтверждён владельцем.
+Это завершает проверку операций провайдеров и ручного рецепта, а не реализацию установщика или приёмку пилота.
 
 Чистая Windows без developer dependencies, автономный ZIP, перенос пакета, истечение OAuth, неизвестные исходы timeout,
 конкурентные процессы, schema upgrades с расходами и parser fixtures остаются работой последующих installer tasks.
@@ -282,6 +287,29 @@ Cloudflare version UUID не равен номеру релиза приложе
 и `result[0].success`, получена строка `1 / GBP / Europe/London`.
 CLI `d1 execute --json` возвращал массив результатов с `success` и `results`; REST возвращает envelope с `result`.
 Адаптер не должен считать эти два формата одинаковыми.
+
+Для добавления единственного тестового участника выполнен POST на тот же D1 query endpoint:
+
+```json
+{
+  "sql": "INSERT INTO members (telegram_user_id, display_name, enabled) VALUES (?, ?, 1) ON CONFLICT(telegram_user_id) DO NOTHING",
+  "params": ["<TEST_TELEGRAM_USER_ID>", "Task1 Test"]
+}
+```
+
+Отдельный параметризованный SELECT `SELECT display_name, enabled FROM members WHERE telegram_user_id = ?`
+подтвердил включённого участника. Повторная вставка не меняет существующего участника; обработка изменения
+его имени или статуса не проверялась. После ручного финансового сценария выполнен CLI readback:
+
+```sql
+SELECT
+  (SELECT COUNT(*) FROM expenses) AS expenses,
+  (SELECT COUNT(*) FROM members WHERE enabled = 1) AS enabled_members;
+SELECT id, display_currency, finance_time_zone FROM instance_settings;
+```
+
+Оба результата имели `success=true`; получены `0 / 1` и `1 / GBP / Europe/London`.
+Личные Telegram ID и реальные пользовательские данные в протокол не включены.
 
 ## Источники для продолжения
 
