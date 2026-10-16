@@ -70,6 +70,8 @@
 
 ## Code style
 
+- If a list of array elements, object or type fields, or similar items spans three or more lines, put each item on its own line.
+  Do not group multiple items on the same line in such lists.
 - Do not use nested ternary expressions. When conditional expressions become nested, replace them with `if`, `switch`, or another clear control flow.
 
 - In new code, place the body of every `if` on the next line, even when it contains only one statement. Braces are optional for a single statement.
