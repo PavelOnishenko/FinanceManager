@@ -52,6 +52,8 @@ type ExpenseRow = {
   updated_at: string;
 };
 
+type ExpenseHistoryRow = (ExpenseRow | { [Field in keyof ExpenseRow]: null }) & { page: number; total: number };
+
 const expenseSelect = `
   SELECT e.id, e.source_action_key, e.amount_rsd, e.category_id, c.name AS category_name,
     e.spent_on, e.comment, e.created_by, m.display_name AS author_name, e.created_at, e.updated_at
@@ -169,10 +171,10 @@ export class D1FinanceRepository {
       )
       SELECT p.*, b.page, b.total FROM bounds b LEFT JOIN page_expenses p ON 1 = 1 ORDER BY p.id DESC`)
       .bind(requestedPage, range.fromDate, range.toDate, range.fromDate, range.toDate)
-      .many<Omit<ExpenseRow, "id"> & { id: number | null; page: number; total: number }>();
+      .many<ExpenseHistoryRow>();
     const page = rows[0]!.page;
     return {
-      expenses: rows.flatMap(row => row.id === null ? [] : [mapExpense({ ...row, id: row.id })]),
+      expenses: rows.flatMap(row => row.id === null ? [] : [mapExpense(row)]),
       page, hasNext: (page + 1) * 10 < rows[0]!.total
     };
   }
