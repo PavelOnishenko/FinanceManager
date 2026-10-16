@@ -374,7 +374,8 @@ See [history behavior and verification scenarios](HISTORY_BROWSING.md).
   Do not display an empty page as a separate screen.
 - [x] Reuse the date-range helpers, month navigation, and calendar rendering from statistics instead of maintaining a second calendar.
   Carry an explicit history/statistics destination in callbacks so selecting a day in history returns an expense list and selecting
-  it in statistics still returns totals. Preserve already-sent statistics buttons and the Telegram 64-byte callback-data limit.
+  it in statistics still returns totals. Use one current calendar callback format with a required history/statistics destination;
+  do not support previously sent calendar buttons. Keep the Telegram 64-byte callback-data limit.
   Keep selections in callback data using the existing stateless approach; no server-side conversation store is needed.
 - [x] Apply the existing enabled-member access check to every new calendar, month, page, and details action. Preserve expense
   details/edit/delete behavior for records opened from period history, including records older than the default latest 10.

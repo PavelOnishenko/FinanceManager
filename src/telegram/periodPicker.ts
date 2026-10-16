@@ -6,17 +6,16 @@ export function calendarText(month: string, startDate?: string): string {
   return `${month}\nПн Вт Ср Чт Пт Сб Вс\n${startDate ? `Начало: ${startDate}. Выберите конец периода.` : "Выберите начало периода."}`;
 }
 
-export function calendarButtons(month: string, startDate?: string, destination: PeriodDestination = "statistics"): InlineKeyboard {
+export function calendarButtons(month: string, destination: PeriodDestination, startDate?: string): InlineKeyboard {
   const range = getCalendarMonthRange(month)!;
   const keyboard = new InlineKeyboard();
   const previous = shiftCalendarMonth(month, -1);
   const next = shiftCalendarMonth(month, 1);
-  const target = destination === "history" ? { destination: "history" as const } : {};
   if (previous)
-    keyboard.text("◀", formatCallbackData({ kind: "calendar", month: previous, startDate, ...target }));
+    keyboard.text("◀", formatCallbackData({ kind: "calendar", month: previous, startDate, destination }));
   keyboard.text(month, formatCallbackData({ kind: "calendar-noop" }));
   if (next)
-    keyboard.text("▶", formatCallbackData({ kind: "calendar", month: next, startDate, ...target }));
+    keyboard.text("▶", formatCallbackData({ kind: "calendar", month: next, startDate, destination }));
   keyboard.row();
   if (destination === "history")
     keyboard.text("Весь месяц", formatCallbackData({ kind: "history-month", month })).row();
@@ -28,12 +27,12 @@ export function calendarButtons(month: string, startDate?: string, destination: 
       keyboard.text("·", formatCallbackData({ kind: "calendar-noop" }));
     else
       keyboard.text(day === Number(startDate?.slice(-2)) && startDate?.startsWith(month) ? `[${day}]` : String(day),
-        formatCallbackData({ kind: "calendar-day", month, day, startDate, ...target }));
+        formatCallbackData({ kind: "calendar-day", month, day, startDate, destination }));
     if (cell % 7 === 6)
       keyboard.row();
   }
   if (startDate)
-    keyboard.row().text("Сбросить начало", formatCallbackData({ kind: "calendar", month, ...target }));
+    keyboard.row().text("Сбросить начало", formatCallbackData({ kind: "calendar", month, destination }));
   if (destination === "history")
     keyboard.row().text("Последние 10", formatCallbackData({ kind: "history-recent" }));
   return keyboard;

@@ -64,7 +64,7 @@ test("help, categories and explicit empty history remain available before settin
     assert.match(String((await fixture.lastCall("sendMessage"))?.payload.text), expected);
   }
   for (const [updateId, data, expected] of [
-    [153, "hk:202601:0", /Выберите начало периода/], [154, "h:202601", /За выбранный период расходов нет/],
+    [153, "k:history:202601:0", /Выберите начало периода/], [154, "h:202601", /За выбранный период расходов нет/],
     [155, "hr", /Расходов пока нет/]
   ] as const) {
     assert.equal((await fixture.webhook(createTelegramUpdates(userId).callback(updateId, data), secret)).status, 200, data);

@@ -8,6 +8,11 @@
 - Permission for a local build does not authorize deployment or remote database operations. Local tests using temporary databases and simulated services are allowed.
 - Keep local checks offline where possible; disable optional telemetry and update checks rather than treating permission for local checks as permission to access internet resources.
 
+## Telegram button compatibility
+
+- For new work or changes to button formats, do not implement compatibility with previously sent buttons or old `callback_data` formats by default.
+  Add backward compatibility only when the user explicitly requests it in their task.
+
 ## Tests
 
 - Keep the suite easy to read, small, and useful for this project's actual risks. Prioritize protection against lost or incorrect financial data,
