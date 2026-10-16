@@ -3,8 +3,8 @@
 Status: P0 implemented and locally verified on October 11, 2026. P1 fully completed:
 the owner confirmed live verification in demo and production on October 13, 2026. P2/P3 bot-side support is complete
 and merged; the owner confirmed live verification in demo and production on October 15, 2026.
-P4 (expense history by period) documentation was approved and merged in PR #5. Implementation is locally verified;
-owner-confirmed live acceptance remains pending before resuming installer work. See [P4 verification](HISTORY_BROWSING.md).
+P4 (expense history by period) is complete: the owner confirmed release and live verification on October 16, 2026.
+The documentation was approved in PR #5; implementation is in PR #6. See [P4 verification](HISTORY_BROWSING.md).
 Installer phases remain pending.
 The subsequent P1 repository-result refactor passed 83/83 tests on October 12, 2026. After removing nested ternaries,
 three focused tests, the type check, and the dry-run build passed. Local tests/check/build are authorized;
@@ -347,8 +347,8 @@ independent-account rehearsal is accepted.
 
 ### Task P4: Browse expense history by month or arbitrary period
 
-Status: implemented locally after owner approval of the documentation in PR #5. No remote Cloudflare operations or deployment
-were performed. Live acceptance on the existing bot remains pending; finish it before continuing independent-family installer work.
+Status: complete. After approving the documentation in PR #5, the owner released P4 and confirmed live verification
+on the existing bot on October 16, 2026. Implementation: PR #6. The agent performed no remote Cloudflare operations or deployment.
 See [history behavior and verification scenarios](HISTORY_BROWSING.md).
 
 - [x] Keep **История** as the entry point and show the latest 10 expenses by default, preserving the current newest-ID-first order,
@@ -396,9 +396,9 @@ for empty results, and the existing statistics and expense details/edit/delete j
 
 - [x] Owner-approved documentation before implementation (PR #5).
 - [x] Local automated verification; see the verification record below.
-- [ ] Owner-authorized deployment and owner-confirmed live acceptance on the existing bot.
+- [x] Owner-run release and owner-confirmed live acceptance on the existing bot (October 16, 2026).
 
-Do not resume the installer phases until live acceptance is recorded.
+P4 has no remaining release or acceptance steps. Installer work in Section 6 may resume; its tasks remain pending.
 
 P4 local verification (October 16, 2026): `npm test` passed 101/101 tests, including the local Worker/webhook journey,
 settings behavior, local D1 migration upgrade, history pagination and existing statistics checks. `npm run check` and
@@ -853,11 +853,12 @@ Stay on Free unless measurements justify an explicit owner-approved upgrade. Rec
 - [ ] New expense dates and relative-period boundaries follow the selected zone; that zone survives an update.
 - [ ] Both settings live in one D1 row in existing and new databases; missing/invalid values fail health and block settings-dependent expense writes.
 - [x] Settings changes take effect without Worker deployment (owner-verified in demo and production on October 15, 2026).
-- [ ] P4 documentation is owner-approved before implementation, and P4 is complete before installer work resumes.
+- [x] P4 documentation was owner-approved before implementation; release and live acceptance are complete (October 16, 2026).
 - [x] History defaults to the latest 10 and offers month/custom-period selection above the expense list (locally verified).
 - [x] History uses the same earliest selectable year, 2026, as statistics for both month navigation and custom ranges (locally verified).
 - [x] All expenses in a chosen period are reachable through pagination, including archived-category expenses and records outside the latest 10 (locally verified).
-- [ ] Inclusive date boundaries, empty periods, access checks, and unchanged statistics/details/edit/delete flows are verified locally and live.
+- [x] Inclusive date boundaries, empty periods, access checks, and unchanged statistics/details/edit/delete flows are verified locally and live
+  (owner confirmation, October 16, 2026).
 - [ ] A clean Windows x64 environment can run the delivered package without developer tools or manual commands.
 - [ ] The owner creates a bot and authorizes Cloudflare; all resource setup happens through the wizard.
 - [ ] Two enabled participants can use the existing finance journeys; unknown users are denied.
