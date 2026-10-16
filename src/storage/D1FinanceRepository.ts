@@ -36,6 +36,8 @@ export type ExpenseStatistics = {
   categoryTotals: { categoryId: CategoryId; categoryName: string; amountRsd: number }[];
 };
 
+export type ExpenseHistoryPage = { expenses: Expense[]; page: number; hasNext: boolean };
+
 type ExpenseRow = {
   id: number;
   source_action_key: string;
@@ -49,6 +51,8 @@ type ExpenseRow = {
   created_at: string;
   updated_at: string;
 };
+
+type ExpenseHistoryRow = (ExpenseRow | { [Field in keyof ExpenseRow]: null }) & { page: number; total: number };
 
 const expenseSelect = `
   SELECT e.id, e.source_action_key, e.amount_rsd, e.category_id, c.name AS category_name,
@@ -153,6 +157,26 @@ export class D1FinanceRepository {
   async getRecentExpenses(): Promise<Expense[]> {
     const rows = await this.database.prepare(`${expenseSelect} ORDER BY e.id DESC LIMIT 10`).many<ExpenseRow>();
     return rows.map(mapExpense);
+  }
+
+  async getExpensesForRange(range: { fromDate: string; toDate: string }, requestedPage: number): Promise<ExpenseHistoryPage> {
+    // Count, clamp and fetch in one statement so concurrent changes cannot empty a page between queries.
+    const rows = await this.database.prepare(`
+      WITH bounds AS (
+        SELECT MIN(?, MAX(0, CAST((COUNT(*) - 1) / 10 AS INTEGER))) AS page, COUNT(*) AS total
+        FROM expenses WHERE spent_on >= ? AND spent_on <= ?
+      ), page_expenses AS (
+        ${expenseSelect} WHERE e.spent_on >= ? AND e.spent_on <= ?
+        ORDER BY e.id DESC LIMIT 10 OFFSET (SELECT page * 10 FROM bounds)
+      )
+      SELECT p.*, b.page, b.total FROM bounds b LEFT JOIN page_expenses p ON 1 = 1 ORDER BY p.id DESC`)
+      .bind(requestedPage, range.fromDate, range.toDate, range.fromDate, range.toDate)
+      .many<ExpenseHistoryRow>();
+    const page = rows[0]!.page;
+    return {
+      expenses: rows.flatMap(row => row.id === null ? [] : [mapExpense(row)]),
+      page, hasNext: (page + 1) * 10 < rows[0]!.total
+    };
   }
 
   async updateExpenseAmount(expenseId: number, amountRsd: number): Promise<Expense | null> {

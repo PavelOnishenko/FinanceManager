@@ -50,17 +50,27 @@ test("a currency change affects the next request without rewriting existing expe
   assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), before);
 });
 
-test("help and categories remain available before settings are migrated", async context => {
+test("help, categories and explicit empty history remain available before settings are migrated", async context => {
   const secret = "selective-secret";
   const userId = 101;
   const fixture = await createWorkerFixture("123:fixture", secret, 9001);
   context.after(() => fixture.dispose());
   await fixture.DB.prepare("DROP TABLE instance_settings").execute();
   await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
-  for (const [updateId, text, expected] of [[150, "Помощь", /Отправьте расход/], [151, "Категории", /Категории/]] as const) {
+  for (const [updateId, text, expected] of [
+    [150, "Помощь", /Отправьте расход/], [151, "Категории", /Категории/], [152, "История", /Расходов пока нет/]
+  ] as const) {
     assert.equal((await fixture.webhook(createTelegramUpdates(userId).message(updateId, text), secret)).status, 200, text);
     assert.match(String((await fixture.lastCall("sendMessage"))?.payload.text), expected);
   }
+  for (const [updateId, data, expected] of [
+    [153, "k:history:202601:0", /Выберите начало периода/], [154, "h:202601", /За выбранный период расходов нет/],
+    [155, "hr", /Расходов пока нет/]
+  ] as const) {
+    assert.equal((await fixture.webhook(createTelegramUpdates(userId).callback(updateId, data), secret)).status, 200, data);
+    assert.match(String((await fixture.lastCall("editMessageText"))?.payload.text), expected);
+  }
+  assert.equal((await fixture.webhook(createTelegramUpdates(userId).callback(156, "hi"), secret)).status, 503);
 });
 
 test("missing settings block category-selection and edit callbacks without changing expenses", async context => {

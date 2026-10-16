@@ -4,19 +4,22 @@ import type { CategoryOption } from "../config/categories";
 import { handleCategoryAction, handleCategoryReply, showCategoryList } from "./categoryManagement";
 import {
   ApplicationResultKind as Result, checkAccess, createExpenseAfterCategorySelection, deleteExpense, editExpense, getExpenseDetails,
-  getExpenseHistory, getPreviousMonthStatistics, getStatisticsForRange, processExpenseMessage, type AccessDenied, type InvalidInput
+  getExpenseHistory, getExpenseHistoryForRange, getPreviousMonthStatistics, getStatisticsForRange, processExpenseMessage, type AccessDenied, type InvalidInput
 } from "../application/financeApplication";
-import { firstStatisticsYear, getCalendarMonthRange, shiftCalendarMonth } from "../application/dateRange";
+import { firstStatisticsYear, getCalendarMonthRange, getDateInFinanceTimeZone, type DateRange } from "../application/dateRange";
 import { createEditPrompt, parseEditPrompt } from "../domain/editPrompt";
 import type { D1FinanceRepository, Expense } from "../storage/D1FinanceRepository";
 import { formatCallbackData, parseCallbackData } from "./callbackData";
 import { parseEditReply } from "./parseEditReply";
+import { addMonthNavigation, calendarButtons, calendarText } from "./periodPicker";
+import { periodHistoryView, recentHistoryView } from "./historyView";
 
 const menu = new Keyboard().text("История").text("Статистика").text("Категории").text("Помощь").resized().persistent();
 const help = "Отправьте расход: 2490 продукты Lidl или просто 2490 и выберите категорию. Дата редактирования: ДД.ММ.ГГГГ.";
 const invalidRangeText = "Конец периода не может быть раньше начала";
 const statisticsStartText = `Статистика доступна с ${firstStatisticsYear} года.`;
-const oldStatisticsYearText = `${statisticsStartText} Откройте её заново.`;
+const statisticsYearLimitText = `${statisticsStartText} Откройте её заново.`;
+const historyYearLimitText = `История доступна с ${firstStatisticsYear} года. Откройте её заново.`;
 const percentageFormatter = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
 export function createFinanceBot(token: string, repository: D1FinanceRepository, loadSettings: InstanceSettingsLoader) {
@@ -55,14 +58,8 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
     if (text === "История") {
       const result = await getExpenseHistory(repository, String(context.from.id));
       if (result.kind === Result.AccessDenied) return void await context.reply(accessDeniedText(result.telegramUserId));
-      if (!result.expenses.length)
-        return void await context.reply("Расходов пока нет.");
-      const settings = await loadSettings();
-      const keyboard = new InlineKeyboard(result.expenses.map(expense => [{
-        text: `#${expense.id} · ${expense.amountRsd} ${settings.displayCurrency} · ${expense.categoryName} · ${formatExpenseDate(expense.spentOn)}`,
-        callback_data: formatCallbackData({ kind: "details", expenseId: expense.id })
-      }]));
-      return void await context.reply("Последние 10 расходов:", { reply_markup: keyboard });
+      const view = recentHistoryView(result.expenses, result.expenses.length ? (await loadSettings()).displayCurrency : undefined);
+      return void await context.reply(view.text, { reply_markup: view.reply_markup });
     }
     if (text === "Статистика") {
       const settings = await loadSettings();
@@ -132,8 +129,8 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
         return;
       }
       const userId = String(context.from.id);
-      if (action.kind === "statistics-year-too-old") {
-        acknowledgement = oldStatisticsYearText;
+      if (action.kind === "statistics-year-too-old" || action.kind === "history-year-too-old") {
+        acknowledgement = action.kind === "history-year-too-old" ? historyYearLimitText : statisticsYearLimitText;
         showAlert = true;
         return;
       }
@@ -142,27 +139,47 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
         return;
       }
       if (action.kind === "calendar-noop") return;
-      if (action.kind === "statistics-month") {
+      if (action.kind === "history-recent") {
+        const result = await getExpenseHistory(repository, userId);
+        if (result.kind === Result.AccessDenied)
+          return void (acknowledgement = accessDeniedText(result.telegramUserId));
+        const view = recentHistoryView(result.expenses, result.expenses.length ? (await loadSettings()).displayCurrency : undefined);
+        await context.editMessageText(view.text, { reply_markup: view.reply_markup });
+      } else if (action.kind === "history-picker") {
+        const month = getDateInFinanceTimeZone(new Date(), (await loadSettings()).financeTimeZone).slice(0, 7);
+        await context.editMessageText(calendarText(month), { reply_markup: calendarButtons(month, "history") });
+      } else if (action.kind === "history-month") {
+        acknowledgement = await showHistoryPeriod(context, repository, userId, getCalendarMonthRange(action.month)!, 0, loadSettings);
+      } else if (action.kind === "history-page") {
+        acknowledgement = await showHistoryPeriod(context, repository, userId, action, action.page, loadSettings);
+      } else if (action.kind === "statistics-month") {
         const range = getCalendarMonthRange(action.month)!;
         const result = await getStatisticsForRange(repository, userId, range);
         if (result.kind !== Result.ExpenseStatistics) 
           return void (acknowledgement = result.kind === Result.AccessDenied ? accessDeniedText(result.telegramUserId) : result.message);
         await context.editMessageText(statisticsText(result, (await loadSettings()).displayCurrency), { reply_markup: statisticsButtons(action.month) });
       } else if (action.kind === "calendar") {
-        await context.editMessageText(calendarText(action.month, action.startDate), { reply_markup: calendarButtons(action.month, action.startDate) });
+        await context.editMessageText(calendarText(action.month, action.startDate), {
+          reply_markup: calendarButtons(action.month, action.destination, action.startDate)
+        });
       } else if (action.kind === "calendar-day") {
         const selectedDate = `${action.month}-${String(action.day).padStart(2, "0")}`;
         if (!action.startDate) 
-          await context.editMessageText(calendarText(action.month, selectedDate), { reply_markup: calendarButtons(action.month, selectedDate)});
+          await context.editMessageText(calendarText(action.month, selectedDate), {
+            reply_markup: calendarButtons(action.month, action.destination, selectedDate)
+          });
         else if (selectedDate < action.startDate) {
           acknowledgement = invalidRangeText;
           showAlert = true;
+        } else if (action.destination === "history") {
+          acknowledgement = await showHistoryPeriod(context, repository, userId,
+            { fromDate: action.startDate, toDate: selectedDate }, 0, loadSettings);
         } else {
           const result = await getStatisticsForRange(repository, userId, { fromDate: action.startDate, toDate: selectedDate });
           if (result.kind !== Result.ExpenseStatistics) 
             return void (acknowledgement = result.kind === Result.AccessDenied ? accessDeniedText(result.telegramUserId) : result.message);
           await context.editMessageText(statisticsText(result, (await loadSettings()).displayCurrency), {
-            reply_markup: new InlineKeyboard().text("Другой период", formatCallbackData({ kind: "calendar", month: action.month }))
+            reply_markup: new InlineKeyboard().text("Другой период", formatCallbackData({ kind: "calendar", month: action.month, destination: "statistics" }))
           });
         }
       } else if (action.kind === "create") {
@@ -226,7 +243,7 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
       showAlert = true;
     } finally {
       const isProblem = !!acknowledgement && ![
-        "Расход сохранён", "Расход удалён", "Расход уже сохранён", invalidRangeText, oldStatisticsYearText
+        "Расход сохранён", "Расход удалён", "Расход уже сохранён", invalidRangeText, statisticsYearLimitText, historyYearLimitText
       ].includes(acknowledgement);
       if (isProblem && context.chat?.type === "private") {
         try {
@@ -279,10 +296,6 @@ function describe(expense: Expense, displayCurrency: string): string {
     + (expense.comment ? ` · ${expense.comment}` : "");
 }
 
-function formatExpenseDate(spentOn: string): string {
-  return spentOn.split("-").reverse().join(".");
-}
-
 function statisticsText(result: Extract<Awaited<ReturnType<typeof getStatisticsForRange>>, { kind: typeof Result.ExpenseStatistics }>, displayCurrency: string): string {
   const lines = result.statistics.categoryTotals.map(category =>
     `${category.categoryName}: ${category.amountRsd} ${displayCurrency} (${percentageFormatter.format(category.amountRsd / result.statistics.totalRsd * 100)}%)`
@@ -292,40 +305,18 @@ function statisticsText(result: Extract<Awaited<ReturnType<typeof getStatisticsF
 }
 
 function statisticsButtons(month: string): InlineKeyboard {
-  const keyboard = new InlineKeyboard();
-  const previous = shiftCalendarMonth(month, -1);
-  const next = shiftCalendarMonth(month, 1);
-  if (previous) keyboard.text("◀ Предыдущий месяц", formatCallbackData({ kind: "statistics-month", month: previous }));
-  if (next) keyboard.text("Следующий месяц ▶", formatCallbackData({ kind: "statistics-month", month: next }));
-  return keyboard.row().text("Другой период", formatCallbackData({ kind: "calendar", month }));
+  const keyboard = addMonthNavigation(new InlineKeyboard(), month, "statistics");
+  return keyboard.row().text("Другой период", formatCallbackData({ kind: "calendar", month, destination: "statistics" }));
 }
 
-function calendarText(month: string, startDate?: string): string {
-  return `${month}\nПн Вт Ср Чт Пт Сб Вс\n${startDate ? `Начало: ${startDate}. Выберите конец периода.` : "Выберите начало периода."}`;
-}
-
-function calendarButtons(month: string, startDate?: string): InlineKeyboard {
-  const range = getCalendarMonthRange(month)!;
-  const keyboard = new InlineKeyboard();
-  const previous = shiftCalendarMonth(month, -1);
-  const next = shiftCalendarMonth(month, 1);
-  if (previous) 
-    keyboard.text("◀", formatCallbackData({ kind: "calendar", month: previous, startDate }));
-  keyboard.text(month, formatCallbackData({ kind: "calendar-noop" }));
-  if (next) 
-    keyboard.text("▶", formatCallbackData({ kind: "calendar", month: next, startDate }));
-  keyboard.row();
-  const firstWeekday = (new Date(`${range.fromDate}T00:00:00Z`).getUTCDay() + 6) % 7;
-  const days = Number(range.toDate.slice(-2));
-  for (let cell = 0; cell < firstWeekday + days; cell++) {
-    const day = cell - firstWeekday + 1;
-    if (day < 1) keyboard.text("·", formatCallbackData({ kind: "calendar-noop" }));
-    else keyboard.text(day === Number(startDate?.slice(-2)) && startDate?.startsWith(month) ? `[${day}]` : String(day),
-      formatCallbackData({ kind: "calendar-day", month, day, startDate }));
-    if (cell % 7 === 6) keyboard.row();
-  }
-  if (startDate) keyboard.row().text("Сбросить начало", formatCallbackData({ kind: "calendar", month }));
-  return keyboard;
+async function showHistoryPeriod(context: Context, repository: D1FinanceRepository, userId: string, range: DateRange, page: number,
+    loadSettings: InstanceSettingsLoader): Promise<string> {
+  const result = await getExpenseHistoryForRange(repository, userId, range, page);
+  if (result.kind !== Result.ExpenseHistory)
+    return result.kind === Result.AccessDenied ? accessDeniedText(result.telegramUserId) : result.message;
+  const view = periodHistoryView(result, result.expenses.length ? (await loadSettings()).displayCurrency : undefined);
+  await context.editMessageText(view.text, { reply_markup: view.reply_markup });
+  return "";
 }
 
 function detailButtons(expenseId: number): InlineKeyboard {

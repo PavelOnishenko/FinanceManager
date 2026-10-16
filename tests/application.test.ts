@@ -6,13 +6,35 @@ import test from "node:test";
 import { categories } from "./defaultCategories";
 import {
   ApplicationResultKind, checkAccess, createExpenseAfterCategorySelection, deleteExpense, editExpense, getExpenseDetails, getExpenseHistory,
-  getPreviousMonthStatistics, getStatisticsForRange, processExpenseMessage
+  getExpenseHistoryForRange, getPreviousMonthStatistics, getStatisticsForRange, processExpenseMessage
 } from "../src/application/financeApplication";
 import { createMigratedLocalD1 } from "../scripts/createLocalD1";
 import { D1FinanceRepository } from "../src/storage/D1FinanceRepository";
 import type { SqlDatabase } from "../src/storage/SqlDatabase";
 
 let testDatabaseNumber = 0;
+
+test("period history enforces access, valid pages and the 2026 date boundary", async testContext => {
+  const context = await createApplicationTestContext();
+  testContext.after(() => context.dispose());
+  await seedMember(context.DB, "101", "Анна", 1);
+  await seedMember(context.DB, "102", "Борис", 0);
+  const range = { fromDate: "2026-01-01", toDate: "2026-01-31" };
+  for (const telegramUserId of ["102", "999"])
+    assert.deepEqual(await getExpenseHistoryForRange(context.repository, telegramUserId, range), {
+      kind: ApplicationResultKind.AccessDenied, telegramUserId
+    });
+  for (const invalid of [
+    { fromDate: "2025-12-31", toDate: "2026-01-01" }, { fromDate: "2026-02-29", toDate: "2026-03-01" },
+    { fromDate: "2026-02-01", toDate: "2026-01-31" }
+  ])
+    assert.equal((await getExpenseHistoryForRange(context.repository, "101", invalid)).kind, ApplicationResultKind.InvalidInput);
+  for (const page of [-1, 1.5, Number.MAX_SAFE_INTEGER + 1])
+    assert.equal((await getExpenseHistoryForRange(context.repository, "101", range, page)).kind, ApplicationResultKind.InvalidInput);
+  assert.deepEqual(await getExpenseHistoryForRange(context.repository, "101", range), {
+    kind: ApplicationResultKind.ExpenseHistory, range, page: 0, hasNext: false, expenses: []
+  });
+});
 
 async function createApplicationTestContext() {
   const context = await createMigratedLocalD1(`application-test-${++testDatabaseNumber}`);
