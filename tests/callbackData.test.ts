@@ -28,10 +28,11 @@ test("history callbacks reject malformed pages and ranges and enforce the shared
   for (const data of [
     "h:202613", "k:history:202602:20260229", "t:history:202602:0:30", "t:history:202602:0:1:extra", "hr:extra",
     "hp:20260201:20260228:-1", "hp:20260201:20260228:1.5", "hp:20260201:20260228:9007199254740992",
-    "hp:20260229:20260301:0", "hp:20260301:20260228:0", "hp:20260201:20260228:0:extra",
-    "h:202512", "k:history:202512:0", "t:history:202601:20251231:1", "hp:20251231:20260101:0"
+    "hp:20260229:20260301:0", "hp:20260301:20260228:0", "hp:20260201:20260228:0:extra"
   ])
     assert.equal(parseCallbackData(data), undefined, data);
+  for (const data of ["h:202512", "k:history:202512:0", "t:history:202601:20251231:1", "hp:20251231:20260101:0"])
+    assert.deepEqual(parseCallbackData(data), { kind: "history-year-too-old" }, data);
 });
 
 test("rejects malformed and obsolete expense callbacks", () => {

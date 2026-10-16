@@ -52,7 +52,7 @@ export function formatCallbackData(action: BotAction): string {
   return data;
 }
 
-export function parseCallbackData(data: string): BotAction | { kind: "statistics-year-too-old" } | undefined {
+export function parseCallbackData(data: string): BotAction | { kind: "statistics-year-too-old" } | { kind: "history-year-too-old" } | undefined {
   if (data === "n") return { kind: "calendar-noop" };
   if (data === "hr")
     return { kind: "history-recent" };
@@ -67,7 +67,7 @@ export function parseCallbackData(data: string): BotAction | { kind: "statistics
         || !/^(0|[1-9]\d*)$/.test(parts[3] ?? "") || !Number.isSafeInteger(page))
       return undefined;
     if (Number(fromDate.slice(0, 4)) < firstStatisticsYear)
-      return undefined;
+      return { kind: "history-year-too-old" };
     return { kind: "history-page", fromDate, toDate, page };
   }
   if (["s", "h", "k", "t"].includes(parts[0] ?? "")) {
@@ -89,14 +89,14 @@ export function parseCallbackData(data: string): BotAction | { kind: "statistics
       return undefined;
     const month = `${monthValue!.slice(0, 4)}-${monthValue!.slice(4)}`;
     if (Number(month.slice(0, 4)) < firstStatisticsYear)
-      return destination === "statistics" ? { kind: "statistics-year-too-old" } : undefined;
+      return destination === "statistics" ? { kind: "statistics-year-too-old" } : { kind: "history-year-too-old" };
     if (isMonth)
       return { kind: destination === "history" ? "history-month" : "statistics-month", month };
     const startDate = parseCompactDate(parts[3]);
     if (parts[3] !== "0" && (!startDate || !isValidCalendarDate(startDate)))
       return undefined;
     if (startDate && Number(startDate.slice(0, 4)) < firstStatisticsYear)
-      return destination === "statistics" ? { kind: "statistics-year-too-old" } : undefined;
+      return destination === "statistics" ? { kind: "statistics-year-too-old" } : { kind: "history-year-too-old" };
     if (parts[0] === "k")
       return { kind: "calendar", month, destination, ...(startDate ? { startDate } : {}) };
     if (!/^(?:[1-9]|[12]\d|3[01])$/.test(parts[4] ?? "") || !isValidCalendarDate(`${month}-${parts[4]!.padStart(2, "0")}`))

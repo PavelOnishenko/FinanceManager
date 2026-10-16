@@ -18,7 +18,8 @@ const menu = new Keyboard().text("История").text("Статистика").
 const help = "Отправьте расход: 2490 продукты Lidl или просто 2490 и выберите категорию. Дата редактирования: ДД.ММ.ГГГГ.";
 const invalidRangeText = "Конец периода не может быть раньше начала";
 const statisticsStartText = `Статистика доступна с ${firstStatisticsYear} года.`;
-const oldStatisticsYearText = `${statisticsStartText} Откройте её заново.`;
+const statisticsYearLimitText = `${statisticsStartText} Откройте её заново.`;
+const historyYearLimitText = `История доступна с ${firstStatisticsYear} года. Откройте её заново.`;
 const percentageFormatter = new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 1 });
 
 export function createFinanceBot(token: string, repository: D1FinanceRepository, loadSettings: InstanceSettingsLoader) {
@@ -128,8 +129,8 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
         return;
       }
       const userId = String(context.from.id);
-      if (action.kind === "statistics-year-too-old") {
-        acknowledgement = oldStatisticsYearText;
+      if (action.kind === "statistics-year-too-old" || action.kind === "history-year-too-old") {
+        acknowledgement = action.kind === "history-year-too-old" ? historyYearLimitText : statisticsYearLimitText;
         showAlert = true;
         return;
       }
@@ -242,7 +243,7 @@ export function createFinanceBot(token: string, repository: D1FinanceRepository,
       showAlert = true;
     } finally {
       const isProblem = !!acknowledgement && ![
-        "Расход сохранён", "Расход удалён", "Расход уже сохранён", invalidRangeText, oldStatisticsYearText
+        "Расход сохранён", "Расход удалён", "Расход уже сохранён", invalidRangeText, statisticsYearLimitText, historyYearLimitText
       ].includes(acknowledgement);
       if (isProblem && context.chat?.type === "private") {
         try {

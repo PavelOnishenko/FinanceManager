@@ -157,6 +157,9 @@ test("history calendar keeps a cross-month start, resets it, rejects reversed ra
   assert(!inlineKeyboard(fixture.calls, "editMessageText").flat().some(button => button.text === "Сбросить начало"));
   await fixture.bot.handleUpdate(fixture.callback(829, "k:history:202601:0"));
   assert(!inlineKeyboard(fixture.calls, "editMessageText").flat().some(button => button.text === "◀"));
+  await fixture.bot.handleUpdate(fixture.callback(830, "t:history:202601:20251231:1"));
+  assert.equal(fixture.calls.at(-1)?.payload.text, "История доступна с 2026 года. Откройте её заново.");
+  assert.equal(fixture.calls.at(-1)?.payload.show_alert, true);
   await fixture.bot.handleUpdate(fixture.callback(831, "s:202602"));
   assert.match(String(fixture.calls.findLast(call => call.method === "editMessageText")?.payload.text), /Итого: 200 RSD/);
   assert.deepEqual(await fixture.database.DB.prepare("SELECT * FROM expenses ORDER BY id").many(), before);
