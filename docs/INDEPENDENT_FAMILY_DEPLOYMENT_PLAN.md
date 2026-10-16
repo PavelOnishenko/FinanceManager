@@ -14,7 +14,8 @@ obsolete category-index callbacks are rejected without a legacy ID snapshot. 89/
 Repository inspection and provider documentation review: October 10, 2026.
 
 This document is a standalone implementation handoff. Checked boxes describe completed work; unchecked boxes describe future work.
-No installer, release package, update flow, or customer-account deployment has been verified yet.
+Installer packaging and the customer update flow remain unverified. Owner-run disposable separate-account provider checks
+are recorded under Task 1; the full manual finance journey on that instance remains pending.
 
 ## How to read and implement this plan
 
@@ -541,23 +542,27 @@ Use the existing Node test runner and actual local D1 where storage behavior mat
 
 ### Task 1: Prove provider operations and pin the supported toolchain
 
-Local preparation (October 16, 2026): see [toolchain probe and owner next steps](INSTALLER_TOOLCHAIN_PROOF.md).
-Pinned CLI help, local Wrangler migration history/retry, settings preservation, and isolated-config dry-run were checked.
-Real provider operations, OAuth isolation, release/binding readback, and Windows packaging remain unverified;
-Task 1 remains open until its real disposable-instance acceptance gate passes.
+Provider verification (October 17, 2026): see [toolchain proof and owner-run results](INSTALLER_TOOLCHAIN_PROOF.md).
+The owner verified the offline probe and live operations on Windows Node 24.13.0, PowerShell 5.1.26100.9711,
+and pinned Wrangler 4.133.0 using a disposable bot and separate Cloudflare account.
+OAuth isolation, migrations/retry, parameter-bound settings writes, deploy/redeploy, secret preservation,
+and release/binding/migration readback passed. Task 1 remains open for the manual recipe's enabled-member expense journey;
+the bot's access-denied response alone does not verify that journey. Windows packaging remains Task 2 work.
 
-- [ ] Read the referenced provider documentation and inspect the pinned Wrangler CLI's actual help.
+- [x] Read the referenced provider documentation and inspect the pinned Wrangler CLI's actual help.
 - [ ] Reproduce the existing manual deployment recipe using a disposable bot and a separate test Cloudflare account.
-- [ ] Verify OAuth login, account enumeration, explicit account selection, database creation, migrations, secrets,
+  Infrastructure, webhook, and denied-member delivery passed; participant enrollment and expense create/edit/delete remain pending.
+- [x] Verify OAuth login, account enumeration, explicit account selection, database creation, migrations, secrets,
   creation/read/update of the one-row D1 settings table, and Worker deployment.
-- [ ] Choose a supported way to isolate/select Wrangler credentials. Named profiles are currently documented as experimental:
+- [x] Choose a supported way to isolate/select Wrangler credentials. Named profiles are currently documented as experimental:
   use them only if the shipped version supports the required behavior; otherwise document and test the supported alternative.
-- [ ] Ensure child processes cannot inherit unrelated Cloudflare credential/account overrides or load the developer's `.env` files.
-- [ ] Always pass the generated instance configuration and explicit remote target. Never execute in the developer checkout by default.
-- [ ] Verify that redeploy preserves existing Worker secrets and that migration history remains intact.
-- [ ] Prove that the installed Worker release, resource bindings, and applied migration names can be read back after
+- [x] Ensure child processes cannot inherit unrelated Cloudflare credential/account overrides or load the developer's `.env` files.
+  The offline probe uses an env allowlist and explicit files; adversarial provider-adapter fixtures remain Task 3 work.
+- [x] Always pass the generated instance configuration and explicit remote target. Never execute in the developer checkout by default.
+- [x] Verify that redeploy preserves existing Worker secrets and that migration history remains intact.
+- [x] Prove that the installed Worker release, resource bindings, and applied migration names can be read back after
   restarting the wizard with only the three local identifiers. Resolve any missing readback before relying on this design.
-- [ ] Record the exact successful CLI/API calls, output parsing strategy, native dependencies, and runtime versions in a toolchain note.
+- [x] Record the exact successful CLI/API calls, output parsing strategy, native dependencies, and runtime versions in a toolchain note.
 
 Acceptance: a real disposable instance works and survives a redeploy.
 Stop implementation of an unproven provider operation and resolve it before wrapping it in UI.
