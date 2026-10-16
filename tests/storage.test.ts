@@ -55,6 +55,45 @@ test("lists the latest ten expenses with author and category", async testContext
   assert.equal(history[0]?.categoryName, "Продукты");
 });
 
+test("period history includes both boundaries and archived categories, and refreshes pages after edits and deletions", async testContext => {
+  const context = await createTestRepository();
+  testContext.after(() => context.dispose());
+  await seedMember(context.DB, "101", "Анна");
+  await seedMember(context.DB, "102", "Борис");
+  const range = { fromDate: "2026-01-01", toDate: "2026-01-31" };
+  const expenses = [];
+  for (let index = 0; index < 12; index++) {
+    expenses.push(expectRepositorySuccess(await context.repository.createExpense({
+      sourceActionKey: `period:${index}`, amountRsd: index + 1, categoryId: "groceries",
+      spentOn: index === 0 ? range.fromDate : range.toDate, createdBy: index % 2 ? "101" : "102"
+    })).expense);
+  }
+  for (const spentOn of ["2025-12-31", "2026-02-01"])
+    expectRepositorySuccess(await context.repository.createExpense({
+      sourceActionKey: spentOn, amountRsd: 999, categoryId: "transport", spentOn, createdBy: "101"
+    }));
+  expectRepositorySuccess(await context.repository.setCategoryActive("groceries", false));
+  const before = await context.DB.prepare("SELECT * FROM expenses ORDER BY id").many();
+  const first = await context.repository.getExpensesForRange(range, 0);
+  assert.deepEqual(first.expenses.map(expense => expense.amountRsd), [12, 11, 10, 9, 8, 7, 6, 5, 4, 3]);
+  assert.equal(first.hasNext, true);
+  const second = await context.repository.getExpensesForRange(range, 1);
+  assert.deepEqual(second.expenses, [expenses[1], expenses[0]]);
+  assert.equal(second.page, 1);
+  assert.equal(second.hasNext, false);
+  assert.deepEqual(await context.DB.prepare("SELECT * FROM expenses ORDER BY id").many(), before);
+
+  await context.repository.updateExpenseDate(expenses[0]!.id, "2026-02-01");
+  await context.repository.deleteExpense(expenses[1]!.id);
+  const refreshed = await context.repository.getExpensesForRange(range, 1);
+  assert.equal(refreshed.page, 0);
+  assert.equal(refreshed.expenses.length, 10);
+  assert.equal(refreshed.hasNext, false);
+  for (const expense of expenses.slice(2))
+    await context.repository.deleteExpense(expense.id);
+  assert.deepEqual(await context.repository.getExpensesForRange(range, 1), { expenses: [], page: 0, hasNext: false });
+});
+
 test("updates editable fields without changing ownership or the source action key", async testContext => {
   const context = await createTestRepository();
   testContext.after(() => context.dispose());

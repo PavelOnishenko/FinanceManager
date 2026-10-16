@@ -51,6 +51,10 @@ test("local webhook smoke covers authentication, expenses, editing, deletion and
 
   await accepted(message(404, "История"));
   assert.match(String((await lastCall("sendMessage"))?.payload.text), /Последние 10 расходов/);
+  await accepted(callback(4041, "h:202601"));
+  assert.match(String((await lastCall("editMessageText"))?.payload.text), /Расходы: 2026-01-01 — 2026-01-31/);
+  await accepted(callback(4042, "ht:202602:20260111:15"));
+  assert.match(String((await lastCall("editMessageText"))?.payload.text), /Расходы: 2026-01-11 — 2026-02-15/);
   await accepted(callback(405, "d:1"));
   assert.match(String((await lastCall("sendMessage"))?.payload.text), /#1 · 2490 RSD/);
 

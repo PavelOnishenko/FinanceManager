@@ -4,7 +4,9 @@ import { parseExpenseInput } from "../domain/parseExpenseInput";
 import { createExpenseActionKey } from "../domain/sourceActionKey";
 import type { CreateExpenseInput, D1FinanceRepository, Expense, Member } from "../storage/D1FinanceRepository";
 import { repositoryFailureToInvalidInput } from "./repositoryFailure";
-import { getDateInFinanceTimeZone, getPreviousCalendarMonthRange, isValidCalendarDate, isValidInclusiveDateRange, type DateRange } from "./dateRange";
+import {
+  firstStatisticsYear, getDateInFinanceTimeZone, getPreviousCalendarMonthRange, isValidCalendarDate, isValidInclusiveDateRange, type DateRange
+} from "./dateRange";
 
 export const ApplicationResultKind = {
   AccessAllowed: "allowed",
@@ -101,6 +103,17 @@ export async function getExpenseHistory(repository: D1FinanceRepository, telegra
   const access = await checkAccess(repository, telegramUserId);
   if (access.kind === ApplicationResultKind.AccessDenied) return access;
   return { kind: ApplicationResultKind.ExpenseHistory, expenses: await repository.getRecentExpenses() };
+}
+
+export async function getExpenseHistoryForRange(repository: D1FinanceRepository, telegramUserId: string, range: DateRange, page = 0) {
+  const access = await checkAccess(repository, telegramUserId);
+  if (access.kind === ApplicationResultKind.AccessDenied)
+    return access;
+  if (!isValidInclusiveDateRange(range.fromDate, range.toDate) || Number(range.fromDate.slice(0, 4)) < firstStatisticsYear)
+    return { kind: ApplicationResultKind.InvalidInput, message: `Укажите существующий включительный диапазон дат с ${firstStatisticsYear} года.` };
+  if (!Number.isSafeInteger(page) || page < 0)
+    return { kind: ApplicationResultKind.InvalidInput, message: "Некорректная страница истории." };
+  return { kind: ApplicationResultKind.ExpenseHistory, range, ...await repository.getExpensesForRange(range, page) };
 }
 
 export async function getExpenseDetails(repository: D1FinanceRepository, telegramUserId: string, expenseId: number) {
