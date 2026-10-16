@@ -4,6 +4,7 @@ import type { Expense, ExpenseHistoryPage } from "../storage/D1FinanceRepository
 import { formatCallbackData } from "./callbackData";
 import { addMonthNavigation } from "./periodPicker";
 
+// todo indicate return type of recentHistoryView
 export function recentHistoryView(expenses: Expense[], displayCurrency?: string) {
   const keyboard = new InlineKeyboard().text("Другой период", formatCallbackData({ kind: "history-picker" }));
   addExpenseButtons(keyboard, expenses, displayCurrency);
