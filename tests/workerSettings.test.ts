@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createTelegramUpdates } from "./telegramUpdates";
+import { createWebhookUser, createWorkerScenario } from "./workerScenario";
 import { createWorkerFixture } from "./workerFixture";
 
 test("missing settings make health unhealthy and block expense writes", async context => {
@@ -8,46 +8,49 @@ test("missing settings make health unhealthy and block expense writes", async co
   const userId = 101;
   const fixture = await createWorkerFixture("123:fixture", secret, 9001);
   context.after(() => fixture.dispose());
-  await fixture.DB.prepare("DELETE FROM instance_settings").execute();
-  await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
+  const { data } = fixture;
+  await data.removeSettings();
+  await data.seedMember(userId, "Анна");
   const health = await fixture.worker.fetch("http://local/health");
   assert.equal(health.status, 503);
   assert.match(JSON.stringify(await health.json()), /instance_settings/);
-  const response = await fixture.webhook(createTelegramUpdates(userId).message(120, "200 продукты"), secret);
+  const user = createWebhookUser(fixture, userId, 9001, secret);
+  const response = await user.sendMessage("200 продукты");
   assert.equal(response.status, 503);
-  assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), []);
+  assert.deepEqual(await data.expenses(), []);
 });
 
 test("a currency change affects the next request without rewriting existing expenses", async context => {
-  const token = "123:fixture";
   const secret = "settings-change-secret";
   const botId = 9001;
   const userId = 101;
   const initialCurrency = "EUR";
   const nextCurrency = "USD";
-  const initialZone = "Europe/Belgrade";
   const amountRsd = 620;
-  const spentOn = "2026-01-05";
-  const sourceActionKey = "expense:122";
-  const createdAt = "2026-01-05T08:00:00.000Z";
-  const updatedAt = "2026-01-06T08:00:00.000Z";
-  const fixture = await createWorkerFixture(token, secret, botId);
+  const fixture = await createWorkerFixture("123:fixture", secret, botId);
   context.after(() => fixture.dispose());
-  await fixture.DB.prepare("UPDATE instance_settings SET display_currency = ?, finance_time_zone = ? WHERE id = 1").bind(initialCurrency, initialZone).execute();
-  await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
-  await fixture.DB.prepare(`INSERT INTO expenses (source_action_key, amount_rsd, category_id, spent_on, created_by, created_at, updated_at)
-    VALUES (?, ?, 'groceries', ?, ?, ?, ?)`).bind(sourceActionKey, amountRsd, spentOn, String(userId), createdAt, updatedAt).execute();
-  const before = await fixture.DB.prepare("SELECT * FROM expenses").many();
-  const details = async (updateId: number) => {
-    const response = await fixture.webhook(createTelegramUpdates(userId).callback(updateId, "d:1"), secret);
-    assert.equal(response.status, 200);
-    return (await fixture.lastCall("sendMessage"))?.payload.text;
-  };
-  assert.match(String(await details(123)), new RegExp(`${amountRsd} ${initialCurrency}`));
-  await fixture.DB.prepare("UPDATE instance_settings SET display_currency = ? WHERE id = 1")
-    .bind(nextCurrency).execute();
-  assert.match(String(await details(124)), new RegExp(`${amountRsd} ${nextCurrency}`));
-  assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), before);
+  const { data } = fixture;
+  await data.setFinanceSettings(initialCurrency, "Europe/Belgrade");
+  await data.seedMember(userId, "Анна");
+  await data.seedExpense({
+    sourceActionKey: "expense:122",
+    amountRsd,
+    categoryId: "groceries",
+    spentOn: "2026-01-05",
+    createdBy: String(userId),
+    createdAt: "2026-01-05T08:00:00.000Z",
+    updatedAt: "2026-01-06T08:00:00.000Z"
+  });
+  const before = await data.expenses();
+  const user = createWorkerScenario(fixture, userId, botId, secret);
+  // d:<expense ID> — inspect the persisted expense before changing the currency.
+  await user.pressButton("d:1");
+  assert.match(user.text(), new RegExp(`${amountRsd} ${initialCurrency}`));
+  await data.setDisplayCurrency(nextCurrency);
+  // d:<expense ID> — reopen #1; the next request must see the changed setting.
+  await user.pressButton("d:1");
+  assert.match(user.text(), new RegExp(`${amountRsd} ${nextCurrency}`));
+  assert.deepEqual(await data.expenses(), before);
 });
 
 test("help, categories and explicit empty history remain available before settings are migrated", async context => {
@@ -55,22 +58,39 @@ test("help, categories and explicit empty history remain available before settin
   const userId = 101;
   const fixture = await createWorkerFixture("123:fixture", secret, 9001);
   context.after(() => fixture.dispose());
-  await fixture.DB.prepare("DROP TABLE instance_settings").execute();
-  await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
-  for (const [updateId, text, expected] of [
-    [150, "Помощь", /Отправьте расход/], [151, "Категории", /Категории/], [152, "История", /Расходов пока нет/]
-  ] as const) {
-    assert.equal((await fixture.webhook(createTelegramUpdates(userId).message(updateId, text), secret)).status, 200, text);
-    assert.match(String((await fixture.lastCall("sendMessage"))?.payload.text), expected);
-  }
-  for (const [updateId, data, expected] of [
-    [153, "k:history:202601:0", /Выберите начало периода/], [154, "h:202601", /За выбранный период расходов нет/],
-    [155, "hr", /Расходов пока нет/]
-  ] as const) {
-    assert.equal((await fixture.webhook(createTelegramUpdates(userId).callback(updateId, data), secret)).status, 200, data);
-    assert.match(String((await fixture.lastCall("editMessageText"))?.payload.text), expected);
-  }
-  assert.equal((await fixture.webhook(createTelegramUpdates(userId).callback(156, "hi"), secret)).status, 503);
+  const { data } = fixture;
+  await data.dropSettingsTable();
+  await data.seedMember(userId, "Анна");
+  const user = createWorkerScenario(fixture, userId, 9001, secret);
+  // These menu actions do not need finance settings, even before the settings table exists.
+  await user.sendMessage("Помощь");
+  assert.match(user.text(), /Отправьте расход/);
+  await user.sendMessage("Категории");
+  assert.match(user.text(), /Категории/);
+  await user.sendMessage("История");
+  assert.match(user.text(), /Расходов пока нет/);
+  // k:<destination>:<YYYYMM>:<start or 0> — an explicitly dated history calendar needs no settings.
+  await user.pressButton("k:history:202601:0");
+  assert.match(user.text(), /Выберите начало периода/);
+  // h:<YYYYMM> — January history also needs no current-month lookup.
+  await user.pressButton("h:202601");
+  assert.match(user.text(), /За выбранный период расходов нет/);
+  // hr — return to recent history.
+  await user.pressButton("hr");
+  assert.match(user.text(), /Расходов пока нет/);
+});
+
+test("opening history at the current month requires instance settings", async context => {
+  const secret = "selective-secret";
+  const fixture = await createWorkerFixture("123:fixture", secret, 9001);
+  context.after(() => fixture.dispose());
+  const { data } = fixture;
+  await data.dropSettingsTable();
+  await data.seedMember(101, "Анна");
+  const user = createWebhookUser(fixture, 101, 9001, secret);
+
+  // hi — the history picker needs settings to determine the family's current month.
+  assert.equal((await user.pressButton("hi")).status, 503);
 });
 
 test("missing settings block category-selection and edit callbacks without changing expenses", async context => {
@@ -78,15 +98,26 @@ test("missing settings block category-selection and edit callbacks without chang
   const userId = 101;
   const fixture = await createWorkerFixture("123:fixture", secret, 9001);
   context.after(() => fixture.dispose());
-  await fixture.DB.prepare("DELETE FROM instance_settings").execute();
-  await fixture.DB.prepare("INSERT INTO members (telegram_user_id, display_name) VALUES (?, ?)").bind(String(userId), "Анна").execute();
-  await fixture.DB.prepare(`INSERT INTO expenses (source_action_key, amount_rsd, category_id, spent_on, created_by, created_at, updated_at)
-    VALUES ('expense:150', 350, 'groceries', '2026-02-17', ?, '2026-02-17T08:00:00Z', '2026-02-17T08:00:00Z')`).bind(String(userId)).execute();
-  const before = await fixture.DB.prepare("SELECT * FROM expenses").many();
-  for (const [updateId, data] of [[151, "c1:151:200:groceries"], [152, "e1:1:other"]] as const) {
-    const response = await fixture.webhook(createTelegramUpdates(userId).callback(updateId, data), secret);
-    assert.equal(response.status, 503, data);
+  const { data } = fixture;
+  await data.removeSettings();
+  await data.seedMember(userId, "Анна");
+  await data.seedExpense({
+    sourceActionKey: "expense:150",
+    amountRsd: 350,
+    categoryId: "groceries",
+    spentOn: "2026-02-17",
+    createdBy: String(userId),
+    createdAt: "2026-02-17T08:00:00Z",
+    updatedAt: "2026-02-17T08:00:00Z"
+  });
+  const before = await data.expenses();
+  const user = createWebhookUser(fixture, userId, 9001, secret);
+  // c1:<source update ID>:<amount>:<category ID> — try to save 200 in groceries.
+  // e1:<expense ID>:<category ID> — try to change existing expense #1 to other.
+  for (const callbackData of ["c1:151:200:groceries", "e1:1:other"]) {
+    const response = await user.pressButton(callbackData);
+    assert.equal(response.status, 503, callbackData);
     assert.match(JSON.stringify(await response.json()), /instance_settings/);
-    assert.deepEqual(await fixture.DB.prepare("SELECT * FROM expenses").many(), before);
+    assert.deepEqual(await data.expenses(), before);
   }
 });

@@ -1,3 +1,4 @@
+import { createWorkerData } from "./workerData";
 import type { Update } from "grammy/types";
 import { readdir, readFile } from "node:fs/promises";
 import { build } from "esbuild";
@@ -34,5 +35,5 @@ export async function createWorkerFixture(token: string, secret: string, botId: 
   });
   const calls = async () => await (await mock.fetch("http://mock.local/calls")).json() as TelegramApiCall[];
   const lastCall = async (method: string) => (await calls()).findLast(call => call.method === method);
-  return { DB, worker, webhook, calls, lastCall, dispose: () => miniflare.dispose() };
+  return { DB, data: createWorkerData(DB), worker, webhook, calls, lastCall, dispose: () => miniflare.dispose() };
 }

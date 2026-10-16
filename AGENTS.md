@@ -1,5 +1,11 @@
 # Project guidance
 
+## Starting work
+
+- Before starting work, pull the latest `master` from `origin` and create the task branch from that updated base.
+  When resuming an existing task branch, fetch `origin/master` and check whether the branch needs updating before making changes.
+  Preserve uncommitted work when updating; do not assume the initial checkout is current.
+
 ## Command permissions
 
 - Local `test`, `build`, and `check` commands may be run without asking for approval. Run the relevant checks before handing changes back to the user.
