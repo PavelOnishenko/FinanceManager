@@ -17,7 +17,7 @@ npm.cmd run demo:webhook
 - `npm.cmd test` runs the automated tests.
 - `npm.cmd run check` checks the Worker and test types.
 - `npm.cmd run build` builds the Worker into `dist` without publishing anything.
-- `npm.cmd run dev` starts the Worker locally with `/health` and the protected `POST /telegram` endpoint. A real webhook requires migrated D1 with a valid `instance_settings` row (migration `0005` seeds `RSD` and `Europe/Belgrade`), `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_WEBHOOK_SECRET`. See [Instance settings](docs/INSTANCE_SETTINGS.md) before deploying.
+- `npm.cmd run dev` starts the Worker locally with `/health` and the protected `POST /telegram` endpoint. A real webhook requires migrated D1 with a valid `instance_settings` row (migration `0005` seeds `RSD` and `Europe/Belgrade`), `TELEGRAM_BOT_TOKEN`, and `TELEGRAM_WEBHOOK_SECRET`. See [Instance settings](docs/design/INSTANCE_SETTINGS.md) before deploying.
 - `npm.cmd run demo:storage` creates a temporary local D1 database, saves the same expense twice, and prints the history and statistics. The expected result is `firstCreated: true`, `duplicateCreated: false`, one 2490 RSD entry, and a statistics total of 2490 RSD.
 - `npm.cmd run demo:application` demonstrates both ways to add an expense through the application layer. The expected results are `directCreated: true`, 15 suggested categories, `selectedCreated: true`, `duplicateCreated: false`, two history entries, and 3190 RSD for the previous month.
 - `npm.cmd run demo:telegram` runs local Telegram update fixtures while intercepting Bot API responses. The expected result is 32 passing tests, including a monthly report, navigation buttons, the January 2026 lower bound, and a calendar range crossing a month boundary. Neither the Telegram network nor the remote Cloudflare D1 database is used.
@@ -25,10 +25,16 @@ npm.cmd run demo:webhook
 
 The local integration tests use a temporary D1 database and a simulated Telegram Bot API. The commands above do not access the deployed bot or the remote database, and they do not automatically verify the production environment.
 
-Technical decisions are documented in [docs/TECHNICAL_DESIGN.md](docs/TECHNICAL_DESIGN.md).
+Technical decisions are documented in [docs/design/TECHNICAL_DESIGN.md](docs/design/TECHNICAL_DESIGN.md).
+
+Tests live in `tests/suites/`, grouped into `unit`, `integration`, and `worker` suites.
+Reusable helpers live in `tests/infrastructure/`, with Telegram and Worker helpers in their own subdirectories.
+`npm test` recursively discovers all `*.test.ts` files under `tests/suites/`.
+Documentation is grouped into `docs/design/`, `docs/testing/`, and `docs/deployment/`;
+the implementation history remains in [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md).
 
 The proposed plan for editable categories, currency display, configurable timezone, and independent family deployment
-is in [docs/INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md](docs/INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md).
+is in [docs/deployment/INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md](docs/deployment/INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md).
 
 ## HOW TO RELEASE:
 npm.cmd test

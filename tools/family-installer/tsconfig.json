@@ -10,5 +10,5 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["./**/*.ts", "../../scripts/build-family-release.ts", "../../tests/installer/**/*.ts"]
+  "include": ["./**/*.ts", "../../scripts/build-family-release.ts", "../../tests/suites/unit/familyRelease.test.ts"]
 }
