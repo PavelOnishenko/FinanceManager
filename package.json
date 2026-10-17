@@ -12,7 +12,11 @@
     "demo:telegram": "tsx --test tests/suites/integration/telegram.test.ts",
     "demo:storage": "tsx scripts/demo-storage.ts",
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy"
+    "deploy": "wrangler deploy",
+    "installer:check": "tsc -p tools/family-installer/tsconfig.json",
+    "installer:test": "tsx --test tests/suites/unit/familyRelease.test.ts",
+    "installer:demo": "tsx tools/family-installer/demo.ts",
+    "release:family": "tsx scripts/build-family-release.ts"
   },
   "dependencies": {
     "grammy": "1.46.0"
