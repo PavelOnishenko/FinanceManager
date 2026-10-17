@@ -74,6 +74,57 @@
 - Summarize meaningful coverage retained or intentionally dropped and checks performed. Explain removed coverage rather than requiring a mapping for every test.
   Treat line and branch coverage as aids for finding gaps, not proof of test value or completeness.
 
+### Scenario readability and test helpers
+
+- Write high-level tests as readable sequences: prepare meaningful data, perform user actions, and assert observable outcomes.
+  A reader should understand the scenario from the test without unpacking transport objects, SQL chains, or API-call searches.
+  More infrastructure code is acceptable when it makes the tests easier to read; minimizing total line count is not the goal.
+- Reuse and extend the existing helpers before adding parallel infrastructure: `tests/telegramDriver.ts`, `tests/telegramFixture.ts`,
+  `tests/telegramOutput.ts`, `tests/telegramUpdates.ts`, `tests/workerScenario.ts`, `tests/workerData.ts`, and `tests/migrationFixture.ts`.
+  Keep real Worker, D1, and Wrangler integration paths where those boundaries are what the test protects.
+- Name action helpers in plain English, such as `sendMessage`, `pressButtonNamed`, and `replyToPrompt`, with few explicit arguments.
+  Extract mechanical update construction, dispatch, SQL setup, response lookup, type narrowing, and repeated assertions.
+  Keep meaningful user actions visible in order; do not hide a whole scenario behind a vaguely named helper.
+- Let fixtures allocate routine update IDs and irrelevant boilerplate values. Specify IDs in the test when their identity matters,
+  such as a source update used for deduplication, a replayed update, or an update ID included in an error message.
+  Keep amounts, dates, members, initial and final values, and other behavior-driving inputs explicit in the test.
+- Add short comments before meaningful stages to explain the user's intent and any non-obvious state transitions.
+  Explain unusual inputs and simulated failures. Comments should clarify why a step matters rather than repeat the function name.
+  For reply helpers, make clear who sends the new reply and who authored the message being replied to when that distinction matters.
+- Keep callback strings literal in tests that supply or verify their format. Do not introduce callback builders or use the production formatter
+  to manufacture inputs or expected strings for those checks. In formatter tests, compare its output against explicit literal expectations.
+  Clicking a displayed button by its label may use the callback returned by the bot; helpers must not reconstruct its encoding.
+- Place callback format reminders beside the relevant strings or a contiguous group with the same format. Explain the action prefix,
+  field order, destinations, IDs, date encodings, sentinels such as `0`, and the exact defect in each malformed example.
+  Explain the user-visible meaning too: for a calendar callback, distinguish the displayed month from an already selected range start;
+  opening another month preserves the start and does not select the end date. Do not rely on readers memorizing the encoding.
+- Use message, button, acknowledgement, alert, and persisted-data helpers for repeated expectations instead of nested API-call searches,
+  casts, optional chains, and non-null assertions in scenarios. Keep scenario-specific expected values visible and failures informative.
+  Preserve meaningful protocol checks: an acknowledgement answers a button press, an alert also requires `show_alert`, and ForceReply
+  requests a reply to a particular bot message. These assertions inspect outgoing requests; they do not prove Telegram client rendering.
+- Split long tests when they combine independent behaviors. Keep multi-step flows together when transitions are the requirement,
+  such as paging after an edit or selecting a range across months. When splitting, preserve relevant setup, including archived categories,
+  other members, out-of-range expenses, and state that must remain unchanged after rejection or deletion.
+- Prefer a named exported input type over nested `Parameters`/`ReturnType` expressions when both express the same contract clearly.
+  Keep helpers tied to the actual method's input contract so incompatible signature changes produce compile-time errors.
+- During a readability rework, inspect TODOs throughout the tests and test infrastructure, resolve the underlying issues, and remove the markers
+  once resolved. Do not merely delete TODO comments or replace explicit scenarios with opaque helpers to make the file shorter.
+
+For an existing fixture, a calendar scenario should read like this:
+
+```ts
+await fixture.seedMember(127, "Анна");
+
+// k:<destination>:<YYYYMM>:<start YYYYMMDD or 0> — open February history with no start selected.
+await fixture.pressButton("k:history:202602:0");
+
+// The user selects February 28, moves to March while retaining that start, then selects March 1 as the end.
+await fixture.pressButtonNamed("28");
+await fixture.pressButtonNamed("▶");
+await fixture.pressButtonNamed("1");
+assert.match(fixture.text(), /Расходы: 2026-02-28 — 2026-03-01/);
+```
+
 ## Code style
 
 - If a list of array elements, object or type fields, or similar items spans three or more lines, put each item on its own line.
