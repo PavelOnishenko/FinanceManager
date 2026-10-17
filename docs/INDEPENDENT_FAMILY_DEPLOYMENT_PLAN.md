@@ -5,7 +5,8 @@ the owner confirmed live verification in demo and production on October 13, 2026
 and merged; the owner confirmed live verification in demo and production on October 15, 2026.
 P4 (expense history by period) is complete: the owner confirmed release and live verification on October 16, 2026.
 The documentation was approved in PR #5; implementation is in PR #6. See [P4 verification](HISTORY_BROWSING.md).
-Installer Task 1 is complete with owner-confirmed verification on October 17, 2026; installer Tasks 2-6 remain pending.
+Installer Task 1 is complete with owner-confirmed verification on October 17, 2026.
+Installer Task 2 packaging is implemented with clean-Windows acceptance pending; Tasks 3-6 remain pending.
 The subsequent P1 repository-result refactor passed 83/83 tests on October 12, 2026. After removing nested ternaries,
 three focused tests, the type check, and the dry-run build passed. Local tests/check/build are authorized;
 commands accessing remote resources require an explicit owner decision.
@@ -571,16 +572,21 @@ Do not deploy test resources into the existing production account/configuration 
 
 ### Task 2: Generate reusable release artifacts
 
-- [ ] Add the release builder and installer-specific Node tsconfig without mixing Node types into the Worker tsconfig.
-- [ ] Build the Worker once on the developer's machine; the owner does not compile application source.
-- [ ] Package the Worker, migrations, runtime, Wrangler configuration template, notices, and launcher at fixed paths
+Status: implementation prepared on October 17, 2026; clean Windows x64 acceptance remains pending.
+See [release build instructions and remaining checks](FAMILY_RELEASE_BUILD.md). The preliminary launcher validates
+the package and clearly reports that setup/update is unavailable until Tasks 3–6. No provider operations were run.
+
+- [x] Add the release builder and installer-specific Node tsconfig without mixing Node types into the Worker tsconfig.
+- [x] Build the Worker once on the developer's machine; the owner does not compile application source.
+- [x] Package the Worker, migrations, runtime, Wrangler configuration template, notices, and launcher at fixed paths
   without real configuration or credentials. Do not include `release.json`.
-- [ ] Create an instance-config template with `DB`, `migrations_dir`, and compatibility date; fill account/database/Worker IDs at setup.
-- [ ] Validate the fixed files exist, paths stay within the extracted package, and migration numbering is unambiguous.
-- [ ] Embed the same incrementing release number in the installer and deployed Worker configuration.
-- [ ] Exclude `.git`, `.env*`, `.dev.vars*`, `.wrangler`, instance settings, logs, and source deployment IDs.
-- [ ] Add proposed scripts `installer:check`, `installer:test`, `installer:demo`, and `release:family` to `package.json`.
-  Make their actual commands and expected outputs explicit when implementing them.
+- [x] Create an instance-config template with `DB`, `migrations_dir`, and compatibility date; fill account/database/Worker IDs at setup.
+- [x] Validate the fixed files exist, paths stay within the extracted package, and migration numbering is unambiguous.
+- [x] Embed the same incrementing release number in the installer and deployed Worker configuration.
+- [x] Exclude `.git`, `.env*`, `.dev.vars*`, `.wrangler`, instance settings, logs, and source deployment IDs.
+- [x] Add proposed scripts `installer:check`, `installer:test`, `installer:demo`, and `release:family` to `package.json`.
+  Commands and expected outputs are documented. `installer:demo` currently demonstrates packaging/migration-history checks;
+  the full local provider/setup/retry/update simulation in Section 7 remains pending until Tasks 3–5 implement those operations.
 
 Acceptance: the ZIP runs on a clean Windows x64 machine without developer tools and contains no developer account/bot data.
 
@@ -723,7 +729,8 @@ npm.cmd run build
 npm.cmd run demo:webhook
 ```
 
-Proposed commands to implement in Task 2; they do not work yet:
+Task 2 commands now exist; see [build instructions](FAMILY_RELEASE_BUILD.md). The demo currently exercises packaging
+and migration-history validation only; the full provider/setup/update simulation remains pending:
 
 ```powershell
 npm.cmd run installer:check
