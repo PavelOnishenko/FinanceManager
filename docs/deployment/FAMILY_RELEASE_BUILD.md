@@ -12,6 +12,7 @@ published release; never change already distributed migrations. No `release.json
 The builder validates the official Windows x64 Node executable's SHA-256 and the dependency
 versions against `package-lock.json`. Prepare dependencies using `npm ci`, which verifies npm integrity.
 Use a fresh preparation directory; the builder does not download anything or repair dependencies.
+The output directory must be outside that toolchain directory to prevent recursive copying.
 
 Fixed paths inside the ZIP:
 
@@ -137,7 +138,7 @@ clean-machine setup/update rehearsal remains Tasks 3–6 and Section 7; do not m
 
 ## Local verification record (October 17, 2026)
 
-Linux x64 / Node 24.19.0: application regression 106/106 passed (including five packaging tests),
+Linux x64 / Node 24.19.0: application regression 112/112 passed on the updated master base (including six packaging tests),
 application/test and installer type checks passed, packaging demo passed, Windows ZIP built with
 1649 files, and an independent ZIP reader verified compressed data. Prebuilt Worker dry-run with
 explicit synthetic instance configuration passed, showing only DB and APP_RELEASE_VERSION=1.

@@ -1,14 +1,21 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { buildFamilyRelease } from "../../../scripts/build-family-release";
 import { temporaryDirectory } from "../../infrastructure/temporaryDirectory";
 import { configTemplate, FIXED_FILES, instanceConfig, migrationSequence, packageFile, validateAppliedMigrations,
   validatePackage } from "../../../tools/family-installer/package";
 import { RELEASE_VERSION } from "../../../tools/family-installer/release";
 import { windowsWranglerPackages, type Lock } from "../../../tools/family-installer/toolchain";
 import { distributionFiles, writeZip } from "../../../tools/family-installer/zip";
+
+test("builder rejects an output inside the toolchain before copying into itself", async context => {
+  const root = await temporaryDirectory(context);
+  await assert.rejects(buildFamilyRelease(root, path.join(root, "node_modules/wrangler/releases")), /outside toolchain/);
+  assert.deepEqual(await readdir(root), []);
+});
 
 test("package rejects missing files, duplicate migrations, traversal and symlink escapes", async context => {
   const root = await temporaryDirectory(context);

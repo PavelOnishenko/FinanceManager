@@ -13,7 +13,9 @@ const repository = fileURLToPath(new URL("../", import.meta.url));
 
 export async function buildFamilyRelease(toolchain: string, outputParent: string) {
   const output = path.resolve(outputParent);
-  assert.notEqual(output, path.resolve(toolchain), "Output must differ from toolchain");
+  const relativeOutput = path.relative(path.resolve(toolchain), output);
+  assert(relativeOutput === ".." || relativeOutput.startsWith(".." + path.sep) || path.isAbsolute(relativeOutput),
+    "Output must be outside toolchain to prevent recursive copying");
   await mkdir(output, { recursive: true });
   const scratch = await mkdtemp(path.join(output, ".family-build-"));
   const stage = path.join(scratch, "package");
