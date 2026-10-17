@@ -2,7 +2,7 @@ import type { UserFromGetMe } from "grammy/types";
 import type { InstanceSettings } from "../src/config/instanceSettings";
 import { createFinanceBot } from "../src/telegram/bot";
 import { createMigratedLocalD1 } from "../scripts/createLocalD1";
-import { D1FinanceRepository } from "../src/storage/D1FinanceRepository";
+import { CreateExpenseInput, D1FinanceRepository } from "../src/storage/D1FinanceRepository";
 import assert from "node:assert/strict";
 import { seedMember } from "./seedMember";
 import { createTelegramUpdates } from "./telegramUpdates";
@@ -10,7 +10,7 @@ import { createTelegramDriver } from "./telegramDriver";
 import { createTelegramOutput, type TelegramApiCall } from "./telegramOutput";
 import { expectRepositorySuccess } from "./repositoryAssertions";
 
-type SeedExpense = Omit<Parameters<D1FinanceRepository["createExpense"]>[0], "sourceActionKey">;
+type SeedExpense = Omit<CreateExpenseInput, "sourceActionKey">;
 let telegramFixtureNumber = 0;
 
 function createTestBotInfo(botId: number): UserFromGetMe {

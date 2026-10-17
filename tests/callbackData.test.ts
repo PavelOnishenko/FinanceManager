@@ -52,6 +52,8 @@ test("callback actions round-trip within Telegram's 64-byte limit", () => {
 
 test("rejects malformed and obsolete expense callbacks", () => {
   for (const data of [
+    // todo we need to remove ALL legacy callback formats from prod code and tests and never support them. Because
+    // Nobody will ever use stale buttons. We should also add note agents.md to never support stale buttons at some point.
     // Legacy c:<source update ID>:<amount>:<category index>; stable category IDs replaced numeric indices.
     "c:41:2490:0",
     // Legacy e:<expense ID>:<category index> — old edit-category button.
