@@ -19,6 +19,18 @@
 - For new work or changes to button formats, do not implement compatibility with previously sent buttons or old `callback_data` formats by default.
   Add backward compatibility only when the user explicitly requests it in their task.
 
+## Directory structure
+
+- Aim for 5–7 directly contained files per directory, with a maximum of 10. Count files, not child directories.
+  Smaller directories are fine when they represent a clear responsibility; do not add filler files to meet the target.
+- Keep test cases in `tests/suites/` and reusable test infrastructure in `tests/infrastructure/`.
+  Group suites by execution boundary (`unit`, `integration`, `worker`) and infrastructure by responsibility (`telegram`, `worker`).
+  Keep shared helpers directly in `tests/infrastructure/`; keep the test TypeScript configuration in `tests/tsconfig.json`.
+- Before adding an eleventh file, split the directory into meaningful subdirectories. Apply the same target and limit to `docs/`,
+  grouping documents by topic (`design`, `testing`, `deployment`), and to new or changed production directories.
+- When moving files, update imports, paths resolved from `import.meta.url`, package scripts, documentation links, and examples together.
+  Keep default test discovery recursive so new nested suites are included. Preserve test coverage and production behavior during directory-only refactors.
+
 ## Tests
 
 - During implementation iterations and PR review, run only tests directly related to the changes made. Select individual tests or
@@ -79,8 +91,10 @@
 - Write high-level tests as readable sequences: prepare meaningful data, perform user actions, and assert observable outcomes.
   A reader should understand the scenario from the test without unpacking transport objects, SQL chains, or API-call searches.
   More infrastructure code is acceptable when it makes the tests easier to read; minimizing total line count is not the goal.
-- Reuse and extend the existing helpers before adding parallel infrastructure: `tests/telegramDriver.ts`, `tests/telegramFixture.ts`,
-  `tests/telegramOutput.ts`, `tests/telegramUpdates.ts`, `tests/workerScenario.ts`, `tests/workerData.ts`, and `tests/migrationFixture.ts`.
+- Reuse and extend the existing helpers before adding parallel infrastructure:
+  `tests/infrastructure/telegram/telegramDriver.ts`, `tests/infrastructure/telegram/telegramFixture.ts`,
+  `tests/infrastructure/telegram/telegramOutput.ts`, `tests/infrastructure/telegram/telegramUpdates.ts`,
+  `tests/infrastructure/worker/workerScenario.ts`, `tests/infrastructure/worker/workerData.ts`, and `tests/infrastructure/migrationFixture.ts`.
   Keep real Worker, D1, and Wrangler integration paths where those boundaries are what the test protects.
 - Name action helpers in plain English, such as `sendMessage`, `pressButtonNamed`, and `replyToPrompt`, with few explicit arguments.
   Extract mechanical update construction, dispatch, SQL setup, response lookup, type narrowing, and repeated assertions.

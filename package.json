@@ -6,10 +6,10 @@
   "scripts": {
     "build": "wrangler deploy --dry-run --outdir dist",
     "check": "tsc -p tsconfig.json && tsc -p tests/tsconfig.json",
-    "test": "tsx --test tests/**/*.test.ts",
-    "demo:webhook": "tsx --test tests/webhookSmoke.test.ts",
+    "test": "tsx --test \"tests/suites/**/*.test.ts\"",
+    "demo:webhook": "tsx --test tests/suites/worker/webhookSmoke.test.ts",
     "demo:application": "tsx scripts/demo-application.ts",
-    "demo:telegram": "tsx --test tests/telegram.test.ts",
+    "demo:telegram": "tsx --test tests/suites/integration/telegram.test.ts",
     "demo:storage": "tsx scripts/demo-storage.ts",
     "dev": "wrangler dev",
     "deploy": "wrangler deploy"
