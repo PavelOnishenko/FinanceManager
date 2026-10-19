@@ -45,10 +45,10 @@ The workers-sdk MIT/Apache texts are vendored from
 Wrangler's own bundled dependency notices remain in its distributed JavaScript.
 
 Only allowlisted project files and the prepared public dependencies enter the archive. Nested
-dependency trees are traversed through the lock, not copied wholesale. Symlinks are rejected;
+dependency trees are traversed through the lock, not copied wholesale.
 `.git`, `.env*`, `.dev.vars*`, `.wrangler`, `.npmrc`, instance state and logs are excluded.
 The complete packaged file allowlist is embedded in the compiled installer, which checks file
-presence and rejects path traversal or symlinks. This is a completeness check, not a signature or
+presence and rejects path traversal. This is a completeness check, not a signature or
 tamper-proof verification. Only use trusted release archives.
 
 Migration names must be consecutive four-digit numeric prefixes starting at 0001, with no duplicates.

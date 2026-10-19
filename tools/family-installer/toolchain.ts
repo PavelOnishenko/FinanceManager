@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { cp, lstat, mkdir, readdir, readFile } from "node:fs/promises";
+import { cp, mkdir, readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { NODE_VERSION, WRANGLER_VERSION } from "./release";
 
@@ -49,18 +49,14 @@ export function forbiddenName(name: string): boolean {
 
 // Never copy nested dependencies implicitly. Every dependency is selected from the lock separately.
 export async function copyPublicTree(source: string, destination: string): Promise<void> {
-  assert(!(await lstat(source)).isSymbolicLink(), `Toolchain symlink: ${source}`);
   await mkdir(destination, { recursive: true });
   for (const entry of await readdir(source, { withFileTypes: true })) {
-    assert(!entry.isSymbolicLink(), `Toolchain symlink: ${entry.name}`);
     if (entry.name === "node_modules" || forbiddenName(entry.name))
       continue;
     if (entry.isDirectory())
       await copyPublicTree(path.join(source, entry.name), path.join(destination, entry.name));
-    else if (entry.isFile())
-      await cp(path.join(source, entry.name), path.join(destination, entry.name));
     else
-      throw new Error(`Unsupported toolchain entry: ${entry.name}`);
+      await cp(path.join(source, entry.name), path.join(destination, entry.name));
   }
 }
 

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { closeSync, openSync, readFileSync, writeSync } from "node:fs";
-import { lstat, readdir } from "node:fs/promises";
+import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { deflateRawSync } from "node:zlib";
 import { forbiddenName } from "./toolchain";
@@ -9,12 +9,11 @@ export async function distributionFiles(root: string, relative = ""): Promise<st
   const files: string[] = [];
   for (const entry of await readdir(path.join(root, relative), { withFileTypes: true })) {
     assert(!forbiddenName(entry.name), `Forbidden distribution file: ${entry.name}`);
-    assert(!entry.isSymbolicLink(), `Distribution symlink: ${entry.name}`);
     const name = relative ? `${relative}/${entry.name}` : entry.name;
     if (entry.isDirectory())
       files.push(...await distributionFiles(root, name));
     else {
-      assert((await lstat(path.join(root, name))).isFile(), `Not a regular file: ${name}`);
+      assert((await stat(path.join(root, name))).isFile(), `Not a regular file: ${name}`);
       files.push(name);
     }
   }
