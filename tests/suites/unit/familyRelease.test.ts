@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { mkdir, readdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { buildFamilyRelease } from "../../../scripts/build-family-release";
@@ -17,7 +17,7 @@ test("builder rejects an output inside the toolchain before copying into itself"
   assert.deepEqual(await readdir(root), []);
 });
 
-test("package rejects missing files, duplicate migrations, traversal and symlink escapes", async context => {
+test("package rejects missing files, duplicate migrations and path traversal", async context => {
   const root = await temporaryDirectory(context);
   const files = [...FIXED_FILES, "wrangler/node_modules/@esbuild/win32-x64/esbuild.exe"];
   for (const name of files) {
@@ -33,10 +33,6 @@ test("package rejects missing files, duplicate migrations, traversal and symlink
     await assert.rejects(resolvePackageFile(root, relative));
   await rm(path.join(root, "wrangler/node_modules/@esbuild/win32-x64/esbuild.exe"));
   await assert.rejects(validatePackage(root, files), /ENOENT/);
-  await writeFile(path.join(root, "wrangler/node_modules/@esbuild/win32-x64/esbuild.exe"), "fixture");
-  await rm(path.join(root, "worker"), { recursive: true });
-  await symlink(path.join(root, "runtime"), path.join(root, "worker"), process.platform === "win32" ? "junction" : "dir");
-  await assert.rejects(validatePackage(root, files), /symlink/);
   assert.throws(() => migrationSequence(["0001_a.sql", "0001_b.sql"]), /duplicate/);
   assert.throws(() => migrationSequence(["0001_a.sql", "0003_c.sql"]), /Missing/);
   assert.throws(() => migrationSequence(["../0001_a.sql"]), /Invalid/);

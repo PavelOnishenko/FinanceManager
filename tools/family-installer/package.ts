@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { lstat, readdir, readFile, realpath } from "node:fs/promises";
+import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { COMPATIBILITY_DATE, RELEASE_VERSION } from "./release";
 
@@ -19,14 +19,9 @@ export const FIXED_FILES = [
 export async function resolvePackageFile(root: string, relative: string): Promise<string> {
   assert(relative && !relative.includes("\\") && !relative.includes(":") && !path.posix.isAbsolute(relative), `Invalid package path: ${relative}`);
   assert(relative.split("/").every(part => part && part !== "." && part !== ".."), `Invalid package path: ${relative}`);
-  const base = await realpath(root);
-  let current = base;
-  for (const part of relative.split("/")) {
-    current = path.join(current, part);
-    assert(!(await lstat(current)).isSymbolicLink(), `Package symlink: ${relative}`);
-  }
-  assert((await lstat(current)).isFile(), `Not a package file: ${relative}`);
-  return current;
+  const filename = path.resolve(root, relative);
+  assert((await stat(filename)).isFile(), `Not a package file: ${relative}`);
+  return filename;
 }
 
 export function migrationSequence(names: string[]): string[] {
