@@ -8,7 +8,7 @@ import { temporaryDirectory } from "../../infrastructure/temporaryDirectory";
 import { configTemplate, FIXED_FILES, instanceConfig, migrationSequence, resolvePackageFile, validateAppliedMigrations,
   validatePackage } from "../../../tools/family-installer/package";
 import { RELEASE_VERSION } from "../../../tools/family-installer/release";
-import { windowsWranglerPackages, type Lock } from "../../../tools/family-installer/toolchain";
+import { collectWindowsX64WranglerPackagePaths, type Lock } from "../../../tools/family-installer/toolchain";
 import { distributionFiles, writeZip } from "../../../tools/family-installer/zip";
 
 test("builder rejects an output inside the toolchain before copying into itself", async context => {
@@ -67,7 +67,7 @@ test("customer config uses explicit identities and prebuilt code, without develo
 
 test("Windows dependency closure retains Wrangler's nested esbuild and omits Linux and developer tools", async () => {
   const lock = JSON.parse(await readFile(new URL("../../../package-lock.json", import.meta.url), "utf8")) as Lock;
-  const selected = windowsWranglerPackages(lock);
+  const selected = collectWindowsX64WranglerPackagePaths(lock);
   assert(selected.includes("node_modules/wrangler/node_modules/esbuild"));
   assert(selected.includes("node_modules/wrangler/node_modules/@esbuild/win32-x64"));
   assert(selected.includes("node_modules/@cloudflare/workerd-windows-64"));

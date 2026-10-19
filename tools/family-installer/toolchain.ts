@@ -14,7 +14,7 @@ type LockedPackage = {
 };
 export type Lock = { packages: Record<string, LockedPackage> };
 
-export function windowsWranglerPackages(lock: Lock): string[] {
+export function collectWindowsX64WranglerPackagePaths(lock: Lock): string[] {
   const selected = new Set<string>();
   function visit(location: string) {
     if (selected.has(location))
@@ -78,7 +78,7 @@ export async function copyToolchain(source: string, destination: string, lock: L
   for (const name of ["node.exe", "LICENSE"])
     await cp(path.join(source, "runtime", name), path.join(destination, "runtime", name));
   const notices = [`Node.js ${NODE_VERSION}: runtime/LICENSE (includes bundled third-party notices).`];
-  for (const location of windowsWranglerPackages(lock)) {
+  for (const location of collectWindowsX64WranglerPackagePaths(lock)) {
     const metadata = JSON.parse(await readFile(path.join(source, location, "package.json"), "utf8"));
     assert.equal(metadata.version, lock.packages[location]!.version, `Toolchain version mismatch: ${location}`);
     await copyPublicTree(path.join(source, location), path.join(destination, "wrangler", location));

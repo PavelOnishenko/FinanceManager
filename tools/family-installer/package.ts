@@ -41,6 +41,7 @@ export function validateAppliedMigrations(packaged: string[], applied: string[])
     "Applied migrations are not a prefix of the package; stop and inspect the installed release");
 }
 
+// todo I want return type here
 export function instanceConfig(accountId: string, databaseId: string, workerName: string, databaseName: string) {
   assert(/^[a-f0-9]{32}$/.test(accountId), "Invalid Cloudflare account ID");
   assert(/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(databaseId), "Invalid D1 database ID");
