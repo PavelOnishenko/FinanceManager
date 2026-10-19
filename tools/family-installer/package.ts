@@ -16,7 +16,7 @@ export const FIXED_FILES = [
   "THIRD_PARTY_NOTICES.txt"
 ] as const;
 
-export async function packageFile(root: string, relative: string): Promise<string> {
+export async function resolvePackageFile(root: string, relative: string): Promise<string> {
   assert(relative && !relative.includes("\\") && !relative.includes(":") && !path.posix.isAbsolute(relative), `Invalid package path: ${relative}`);
   assert(relative.split("/").every(part => part && part !== "." && part !== ".."), `Invalid package path: ${relative}`);
   const base = await realpath(root);
@@ -79,11 +79,11 @@ export function configTemplate() {
 
 export async function validatePackage(root: string, files: readonly string[]): Promise<string[]> {
   for (const name of files)
-    await packageFile(root, name);
-  assert.deepEqual(JSON.parse(await readFile(await packageFile(root, "wrangler.template.json"), "utf8")), configTemplate(),
+    await resolvePackageFile(root, name);
+  assert.deepEqual(JSON.parse(await readFile(await resolvePackageFile(root, "wrangler.template.json"), "utf8")), configTemplate(),
     "Invalid or mismatched release configuration template");
   const migrations = migrationSequence(await readdir(path.join(root, "migrations")));
   for (const name of migrations)
-    await packageFile(root, `migrations/${name}`);
+    await resolvePackageFile(root, `migrations/${name}`);
   return migrations;
 }

@@ -4,7 +4,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "no
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
-import { configTemplate, FIXED_FILES, migrationSequence, packageFile, validatePackage } from "../tools/family-installer/package";
+import { configTemplate, FIXED_FILES, migrationSequence, resolvePackageFile, validatePackage } from "../tools/family-installer/package";
 import { COMPATIBILITY_DATE, RELEASE_VERSION } from "../tools/family-installer/release";
 import { copyToolchain, type Lock } from "../tools/family-installer/toolchain";
 import { distributionFiles, writeZip } from "../tools/family-installer/zip";
@@ -26,7 +26,7 @@ export async function buildFamilyRelease(toolchain: string, outputParent: string
     const migrations = migrationSequence(await readdir(path.join(repository, "migrations")));
     await mkdir(path.join(stage, "migrations"));
     for (const name of migrations)
-      await cp(await packageFile(path.join(repository, "migrations"), name), path.join(stage, "migrations", name));
+      await cp(await resolvePackageFile(path.join(repository, "migrations"), name), path.join(stage, "migrations", name));
     await writeFile(path.join(stage, "wrangler.template.json"), JSON.stringify(configTemplate(), null, 2) + "\n");
     for (const name of ["Start setup.cmd", "RELEASE_NOTES.ru.md"])
       await cp(path.join(repository, "tools/family-installer/assets", name), path.join(stage, name));

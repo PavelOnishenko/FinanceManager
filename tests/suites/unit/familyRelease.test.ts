@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { buildFamilyRelease } from "../../../scripts/build-family-release";
 import { temporaryDirectory } from "../../infrastructure/temporaryDirectory";
-import { configTemplate, FIXED_FILES, instanceConfig, migrationSequence, packageFile, validateAppliedMigrations,
+import { configTemplate, FIXED_FILES, instanceConfig, migrationSequence, resolvePackageFile, validateAppliedMigrations,
   validatePackage } from "../../../tools/family-installer/package";
 import { RELEASE_VERSION } from "../../../tools/family-installer/release";
 import { windowsWranglerPackages, type Lock } from "../../../tools/family-installer/toolchain";
@@ -30,7 +30,7 @@ test("package rejects missing files, duplicate migrations, traversal and symlink
   await writeFile(path.join(root, "migrations/0001_initial.sql"), "SELECT 1;");
   assert.deepEqual(await validatePackage(root, files), ["0001_initial.sql"]);
   for (const relative of ["../secret", "/absolute", "C:/absolute", "worker/../../secret", "worker\\..\\secret"])
-    await assert.rejects(packageFile(root, relative));
+    await assert.rejects(resolvePackageFile(root, relative));
   await rm(path.join(root, "wrangler/node_modules/@esbuild/win32-x64/esbuild.exe"));
   await assert.rejects(validatePackage(root, files), /ENOENT/);
   await writeFile(path.join(root, "wrangler/node_modules/@esbuild/win32-x64/esbuild.exe"), "fixture");
