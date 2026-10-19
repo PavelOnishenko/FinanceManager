@@ -33,6 +33,8 @@
 
 ## Tests
 
+- Avoid adding production logic solely to accommodate tests, including test-mode branches, fallback values, and optional build-time inputs.
+  Keep required production inputs explicit. Adapt test setup to the production contract rather than weakening that contract for tests.
 - During implementation iterations and PR review, run only tests directly related to the changes made. Select individual tests or
   the smallest relevant test files; do not run unrelated tests.
 - Run the full regression suite only for final task verification or after substantial changes spanning multiple layers.

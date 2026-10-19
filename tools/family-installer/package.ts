@@ -3,9 +3,6 @@ import { lstat, readdir, readFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { COMPATIBILITY_DATE, RELEASE_VERSION } from "./release";
 
-// Replaced by the builder with the complete allowlist; no second on-disk manifest.
-declare const __FAMILY_FILES__: string[] | undefined;
-
 export const FIXED_FILES = [
   "installer/installer.cjs",
   "worker/worker.js",
@@ -80,8 +77,8 @@ export function configTemplate() {
   return config;
 }
 
-export async function validatePackage(root: string): Promise<string[]> {
-  for (const name of typeof __FAMILY_FILES__ === "undefined" ? FIXED_FILES : __FAMILY_FILES__!)
+export async function validatePackage(root: string, files: readonly string[]): Promise<string[]> {
+  for (const name of files)
     await packageFile(root, name);
   assert.deepEqual(JSON.parse(await readFile(await packageFile(root, "wrangler.template.json"), "utf8")), configTemplate(),
     "Invalid or mismatched release configuration template");

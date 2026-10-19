@@ -19,21 +19,23 @@ test("builder rejects an output inside the toolchain before copying into itself"
 
 test("package rejects missing files, duplicate migrations, traversal and symlink escapes", async context => {
   const root = await temporaryDirectory(context);
-  for (const name of FIXED_FILES) {
+  const files = [...FIXED_FILES, "wrangler/node_modules/@esbuild/win32-x64/esbuild.exe"];
+  for (const name of files) {
     await mkdir(path.dirname(path.join(root, name)), { recursive: true });
     await writeFile(path.join(root, name), "fixture");
   }
   await writeFile(path.join(root, "wrangler.template.json"), JSON.stringify(configTemplate()));
   await mkdir(path.join(root, "migrations"));
   await writeFile(path.join(root, "migrations/0001_initial.sql"), "SELECT 1;");
-  assert.deepEqual(await validatePackage(root), ["0001_initial.sql"]);
+  assert.deepEqual(await validatePackage(root, files), ["0001_initial.sql"]);
   for (const relative of ["../secret", "/absolute", "C:/absolute", "worker/../../secret", "worker\\..\\secret"])
     await assert.rejects(packageFile(root, relative));
-  await rm(path.join(root, "worker/worker.js"));
-  await assert.rejects(validatePackage(root), /ENOENT/);
+  await rm(path.join(root, "wrangler/node_modules/@esbuild/win32-x64/esbuild.exe"));
+  await assert.rejects(validatePackage(root, files), /ENOENT/);
+  await writeFile(path.join(root, "wrangler/node_modules/@esbuild/win32-x64/esbuild.exe"), "fixture");
   await rm(path.join(root, "worker"), { recursive: true });
   await symlink(path.join(root, "runtime"), path.join(root, "worker"), process.platform === "win32" ? "junction" : "dir");
-  await assert.rejects(validatePackage(root), /symlink/);
+  await assert.rejects(validatePackage(root, files), /symlink/);
   assert.throws(() => migrationSequence(["0001_a.sql", "0001_b.sql"]), /duplicate/);
   assert.throws(() => migrationSequence(["0001_a.sql", "0003_c.sql"]), /Missing/);
   assert.throws(() => migrationSequence(["../0001_a.sql"]), /Invalid/);

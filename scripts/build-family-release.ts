@@ -4,7 +4,7 @@ import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "no
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
-import { configTemplate, migrationSequence, packageFile, validatePackage } from "../tools/family-installer/package";
+import { configTemplate, FIXED_FILES, migrationSequence, packageFile, validatePackage } from "../tools/family-installer/package";
 import { COMPATIBILITY_DATE, RELEASE_VERSION } from "../tools/family-installer/release";
 import { copyToolchain, type Lock } from "../tools/family-installer/toolchain";
 import { distributionFiles, writeZip } from "../tools/family-installer/zip";
@@ -74,7 +74,7 @@ export async function buildFamilyRelease(toolchain: string, outputParent: string
       legalComments: "linked"
     });
     assert.equal(JSON.parse(await readFile(path.join(stage, "wrangler.template.json"), "utf8")).compatibility_date, COMPATIBILITY_DATE);
-    await validatePackage(stage);
+    await validatePackage(stage, FIXED_FILES);
     const files = await distributionFiles(stage);
     const zip = path.join(scratch, `family-finance-${RELEASE_VERSION}-windows-x64.zip`);
     writeZip(stage, files, zip);
