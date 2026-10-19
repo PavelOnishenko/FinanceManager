@@ -44,9 +44,10 @@ The workers-sdk MIT/Apache texts are vendored from
 `https://raw.githubusercontent.com/cloudflare/workers-sdk/main/LICENSE-MIT` and `LICENSE-APACHE`;
 Wrangler's own bundled dependency notices remain in its distributed JavaScript.
 
-Only allowlisted project files and the prepared public dependencies enter the archive. Nested
-dependency trees are traversed through the lock, not copied wholesale.
-`.git`, `.env*`, `.dev.vars*`, `.wrangler`, `.npmrc`, instance state and logs are excluded.
+Only allowlisted project files and the prepared public dependencies enter the archive. Project
+configuration, credentials, instance state and logs are not copy sources. Dependency package contents
+are copied without filename filtering; nested `node_modules` directories are handled separately
+through the lock rather than copied wholesale.
 The complete packaged file allowlist is embedded in the compiled installer, which checks file
 presence and rejects path traversal. This is a completeness check, not a signature or
 tamper-proof verification. Only use trusted release archives.
@@ -142,7 +143,7 @@ Linux x64 / Node 24.19.0: application regression 112/112 passed on the updated m
 application/test and installer type checks passed, packaging demo passed, Windows ZIP built with
 1649 files, and an independent ZIP reader verified compressed data. Prebuilt Worker dry-run with
 explicit synthetic instance configuration passed, showing only DB and APP_RELEASE_VERSION=1.
-Production/demo identifiers and prohibited paths were checked against archive contents.
+Production/demo identifiers were checked against archive contents; project configuration is not a copy source.
 Relocated compiled entrypoint and rejection after removing a packaged native dependency were
 checked using the Linux Node host. Windows executables, launcher, system-library availability,
 OAuth and remote deployment were not executed. Clean Windows acceptance is still required.
