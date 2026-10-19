@@ -20,8 +20,9 @@ test("builder rejects an output inside the toolchain before copying into itself"
 test("package rejects missing files, duplicate migrations, traversal and symlink escapes", async context => {
   const root = await temporaryDirectory(context);
   for (const name of FIXED_FILES) {
-    await mkdir(path.dirname(path.join(root, name)), { recursive: true });
-    await writeFile(path.join(root, name), "fixture");
+    const filePath = path.join(root, name);
+    await mkdir(path.dirname(filePath), { recursive: true });
+    await writeFile(filePath, "fixture");
   }
   await writeFile(path.join(root, "wrangler.template.json"), JSON.stringify(configTemplate()));
   await mkdir(path.join(root, "migrations"));
