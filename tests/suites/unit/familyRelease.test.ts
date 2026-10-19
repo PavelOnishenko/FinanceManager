@@ -75,7 +75,7 @@ test("Windows dependency closure retains Wrangler's nested esbuild and omits Lin
   assert(!selected.includes("node_modules/esbuild"));
 });
 
-test("ZIP preserves spaces, Unicode and bytes and refuses private files before publication", async context => {
+test("ZIP preserves spaces, Unicode and bytes with reproducible output", async context => {
   const root = await temporaryDirectory(context);
   await mkdir(path.join(root, "package"));
   await writeFile(path.join(root, "package/Start setup.cmd"), "@echo off\r\n");
@@ -91,6 +91,4 @@ test("ZIP preserves spaces, Unicode and bytes and refuses private files before p
     { encoding: "utf8", shell: false });
     assert.equal(result.status, 0, result.stderr);
   }
-  await writeFile(path.join(root, "package/.env.local"), "PRIVATE=fixture");
-  await assert.rejects(distributionFiles(path.join(root, "package")), /Forbidden/);
 });

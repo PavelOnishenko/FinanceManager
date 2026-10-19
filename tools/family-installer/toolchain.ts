@@ -43,15 +43,11 @@ export function windowsWranglerPackages(lock: Lock): string[] {
   return [...selected].sort();
 }
 
-export function forbiddenName(name: string): boolean {
-  return /^(\.git|\.wrangler|\.env.*|\.dev\.vars.*|\.npmrc|\.bin|logs?|instance(?:[.-].*)?|release\.json)$/i.test(name) || /\.log$/i.test(name);
-}
-
 // Never copy nested dependencies implicitly. Every dependency is selected from the lock separately.
 export async function copyPublicTree(source: string, destination: string): Promise<void> {
   await mkdir(destination, { recursive: true });
   for (const entry of await readdir(source, { withFileTypes: true })) {
-    if (entry.name === "node_modules" || forbiddenName(entry.name))
+    if (entry.name === "node_modules")
       continue;
     if (entry.isDirectory())
       await copyPublicTree(path.join(source, entry.name), path.join(destination, entry.name));

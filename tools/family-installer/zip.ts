@@ -3,12 +3,10 @@ import { closeSync, openSync, readFileSync, writeSync } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { deflateRawSync } from "node:zlib";
-import { forbiddenName } from "./toolchain";
 
 export async function distributionFiles(root: string, relative = ""): Promise<string[]> {
   const files: string[] = [];
   for (const entry of await readdir(path.join(root, relative), { withFileTypes: true })) {
-    assert(!forbiddenName(entry.name), `Forbidden distribution file: ${entry.name}`);
     const name = relative ? `${relative}/${entry.name}` : entry.name;
     if (entry.isDirectory())
       files.push(...await distributionFiles(root, name));

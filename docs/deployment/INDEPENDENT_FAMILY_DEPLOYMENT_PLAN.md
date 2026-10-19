@@ -585,6 +585,7 @@ the package and clearly reports that setup/update is unavailable until Tasks 3â€
 - [x] Validate the fixed files exist, paths stay within the extracted package, and migration numbering is unambiguous.
 - [x] Embed the same incrementing release number in the installer and deployed Worker configuration.
 - [x] Exclude `.git`, `.env*`, `.dev.vars*`, `.wrangler`, instance settings, logs, and source deployment IDs.
+  Select project copy sources explicitly; copy published dependency package contents without filename filtering.
 - [x] Add proposed scripts `installer:check`, `installer:test`, `installer:demo`, and `release:family` to `package.json`.
   Commands and expected outputs are documented. `installer:demo` currently demonstrates packaging/migration-history checks;
   the full local provider/setup/retry/update simulation in Section 7 remains pending until Tasks 3â€“5 implement those operations.
