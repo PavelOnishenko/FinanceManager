@@ -84,11 +84,19 @@ test("ZIP preserves spaces, Unicode and bytes with reproducible output", async c
   writeZip(path.join(root, "package"), files, path.join(root, "release.zip"));
   writeZip(path.join(root, "package"), files, path.join(root, "repeat.zip"));
   assert.deepEqual(await readFile(path.join(root, "release.zip")), await readFile(path.join(root, "repeat.zip")));
-  // Independent standard-library reader, available on the Linux verification host.
-  if (process.platform !== "win32") {
-    const result = spawnSync("python3", ["-c", "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; " +
-      "assert z.read('заметки.txt').decode() == 'Комплект проверен\\n'; assert z.read('Start setup.cmd') == b'@echo off\\r\\n'", path.join(root, "release.zip")],
-    { encoding: "utf8", shell: false });
-    assert.equal(result.status, 0, result.stderr);
-  }
+ // Independent ZIP verification using Python's standard library on Windows and Linux.
+  const pythonCommand = process.platform === "win32" ? "python" : "python3";
+  const result = spawnSync(pythonCommand, [
+    "-c",
+    "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; " +
+      "assert z.read('заметки.txt').decode('utf-8') == 'Комплект проверен\\n'; " +
+      "assert z.read('Start setup.cmd') == b'@echo off\\r\\n'",
+    path.join(root, "release.zip")
+  ], {
+    encoding: "utf8",
+    shell: false
+  });
+
+  assert.ifError(result.error);
+  assert.equal(result.status, 0, result.stderr);
 });
