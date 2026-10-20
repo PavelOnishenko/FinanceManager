@@ -74,8 +74,8 @@ export function configTemplate() {
 export async function validatePackage(root: string, files: readonly string[]): Promise<string[]> {
   for (const name of files)
     await resolvePackageFile(root, name);
-  assert.deepEqual(JSON.parse(await readFile(await resolvePackageFile(root, "wrangler.template.json"), "utf8")), configTemplate(),
-    "Invalid or mismatched release configuration template");
+  const configFileContents = await readFile((await resolvePackageFile(root, "wrangler.template.json")), "utf8");
+  assert.deepEqual(JSON.parse(configFileContents), configTemplate(), "Invalid or mismatched release configuration template");
   const migrations = migrationSequence(await readdir(path.join(root, "migrations")));
   for (const name of migrations)
     await resolvePackageFile(root, `migrations/${name}`);

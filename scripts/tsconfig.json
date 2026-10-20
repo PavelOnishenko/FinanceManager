@@ -1,0 +1,4 @@
+{
+  "extends": "../tools/family-installer/tsconfig.json",
+  "include": ["./build-family-release.ts"]
+}
