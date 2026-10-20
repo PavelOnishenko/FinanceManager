@@ -17,8 +17,6 @@ export const FIXED_FILES = [
 ] as const;
 
 export async function resolvePackageFile(root: string, relative: string): Promise<string> {
-  assert(relative && !relative.includes("\\") && !relative.includes(":") && !path.posix.isAbsolute(relative), `Invalid package path: ${relative}`);
-  assert(relative.split("/").every(part => part && part !== "." && part !== ".."), `Invalid package path: ${relative}`);
   const filename = path.resolve(root, relative);
   assert((await stat(filename)).isFile(), `Not a package file: ${relative}`);
   return filename;

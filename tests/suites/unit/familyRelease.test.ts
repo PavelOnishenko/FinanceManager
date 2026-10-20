@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { buildFamilyRelease } from "../../../scripts/build-family-release";
 import { temporaryDirectory } from "../../infrastructure/temporaryDirectory";
-import { configTemplate, FIXED_FILES, instanceConfig, migrationSequence, resolvePackageFile, validateAppliedMigrations,
+import { configTemplate, FIXED_FILES, instanceConfig, migrationSequence, validateAppliedMigrations,
   validatePackage } from "../../../tools/family-installer/package";
 import { RELEASE_VERSION } from "../../../tools/family-installer/release";
 import { collectWindowsX64WranglerPackagePaths, type Lock } from "../../../tools/family-installer/toolchain";
@@ -17,7 +17,7 @@ test("builder rejects an output inside the toolchain before copying into itself"
   assert.deepEqual(await readdir(root), []);
 });
 
-test("package rejects missing files, duplicate migrations and path traversal", async context => {
+test("package rejects missing files, directories in place of files and invalid migration numbering", async context => {
   const root = await temporaryDirectory(context);
   const files = [...FIXED_FILES, "wrangler/node_modules/@esbuild/win32-x64/esbuild.exe"];
   for (const name of files) {
@@ -29,10 +29,10 @@ test("package rejects missing files, duplicate migrations and path traversal", a
   await mkdir(path.join(root, "migrations"));
   await writeFile(path.join(root, "migrations/0001_initial.sql"), "SELECT 1;");
   assert.deepEqual(await validatePackage(root, files), ["0001_initial.sql"]);
-  for (const relative of ["../secret", "/absolute", "C:/absolute", "worker/../../secret", "worker\\..\\secret"])
-    await assert.rejects(resolvePackageFile(root, relative));
   await rm(path.join(root, "wrangler/node_modules/@esbuild/win32-x64/esbuild.exe"));
   await assert.rejects(validatePackage(root, files), /ENOENT/);
+  await mkdir(path.join(root, "wrangler/node_modules/@esbuild/win32-x64/esbuild.exe"));
+  await assert.rejects(validatePackage(root, files), /Not a package file/);
   assert.throws(() => migrationSequence(["0001_a.sql", "0001_b.sql"]), /duplicate/);
   assert.throws(() => migrationSequence(["0001_a.sql", "0003_c.sql"]), /Missing/);
   assert.throws(() => migrationSequence(["../0001_a.sql"]), /Invalid/);

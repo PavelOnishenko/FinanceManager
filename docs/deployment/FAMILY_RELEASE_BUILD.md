@@ -48,8 +48,8 @@ Only allowlisted project files and the prepared public dependencies enter the ar
 configuration, credentials, instance state and logs are not copy sources. Dependency package contents
 are copied without filename filtering; nested `node_modules` directories are handled separately
 through the lock rather than copied wholesale.
-The complete packaged file allowlist is embedded in the compiled installer, which checks file
-presence and rejects path traversal. This is a completeness check, not a signature or
+The complete packaged file allowlist is embedded in the compiled installer, which checks that each
+listed path exists and is a regular file. This is a completeness check, not a signature or
 tamper-proof verification. Only use trusted release archives.
 
 Migration names must be consecutive four-digit numeric prefixes starting at 0001, with no duplicates.
@@ -95,7 +95,7 @@ npm.cmd run release:family -- work/windows-toolchain work/releases
 
 - `installer:check`: independent Node TypeScript check, exit 0; Worker tsconfig remains unchanged.
 - `installer:test`: focused package validation, customer-config, migration sequence, dependency closure,
-  and ZIP tests. The independent Python ZIP-reader assertion runs on the Linux verification host.
+  and ZIP tests. Independent ZIP verification requires Python: `python` on Windows, `python3` on Linux.
 - `installer:demo`: offline packaging demo of fresh, interrupted, complete and unknown migration
   histories. Expected final message: `Симуляция провайдеров, установки и обновления появится в задачах 3–5.`
   This is deliberately not the full setup/retry/update provider simulation required by Section 7;
@@ -136,14 +136,3 @@ esbuild `0.28.1`, and command help without dependency installation.
 Record Windows version, outputs, and any missing system-library errors. OAuth, actual D1 migrations,
 Worker deployment and Telegram delivery are not part of this offline check. Full provider and
 clean-machine setup/update rehearsal remains Tasks 3–6 and Section 7; do not mark the pilot ready.
-
-## Local verification record (October 17, 2026)
-
-Linux x64 / Node 24.19.0: application regression 112/112 passed on the updated master base (including six packaging tests),
-application/test and installer type checks passed, packaging demo passed, Windows ZIP built with
-1649 files, and an independent ZIP reader verified compressed data. Prebuilt Worker dry-run with
-explicit synthetic instance configuration passed, showing only DB and APP_RELEASE_VERSION=1.
-Production/demo identifiers were checked against archive contents; project configuration is not a copy source.
-Relocated compiled entrypoint and rejection after removing a packaged native dependency were
-checked using the Linux Node host. Windows executables, launcher, system-library availability,
-OAuth and remote deployment were not executed. Clean Windows acceptance is still required.

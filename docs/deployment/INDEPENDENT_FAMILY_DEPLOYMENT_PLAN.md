@@ -582,7 +582,7 @@ the package and clearly reports that setup/update is unavailable until Tasks 3â€
 - [x] Package the Worker, migrations, runtime, Wrangler configuration template, notices, and launcher at fixed paths
   without real configuration or credentials. Do not include `release.json`.
 - [x] Create an instance-config template with `DB`, `migrations_dir`, and compatibility date; fill account/database/Worker IDs at setup.
-- [x] Validate the fixed files exist, paths stay within the extracted package, and migration numbering is unambiguous.
+- [x] Validate the fixed files exist and are regular files, and migration numbering is unambiguous.
 - [x] Embed the same incrementing release number in the installer and deployed Worker configuration.
 - [x] Exclude `.git`, `.env*`, `.dev.vars*`, `.wrangler`, instance settings, logs, and source deployment IDs.
   Select project copy sources explicitly; copy published dependency package contents without filename filtering.
