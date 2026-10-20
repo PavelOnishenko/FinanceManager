@@ -56,83 +56,21 @@ Migration names must be consecutive four-digit numeric prefixes starting at 0001
 Applied history must match an exact prefix of the package sequence; otherwise stop before mutation.
 The provider adapter will call this check with real readback in later tasks.
 
-## Prepare the Windows toolchain (developer only, network required)
+## Build and acceptance checklist
 
-Run from the repository root on a development machine with Node/npm. The same npm preparation
-works on Linux using `--os=win32 --cpu=x64`; no Windows binaries are executed during packaging.
-These commands download public artifacts and do not contact customer accounts.
+Follow the [step-by-step Task 2 acceptance checklist](FAMILY_RELEASE_ACCEPTANCE.md) in Russian.
+It contains the exact PowerShell commands and expected results for preparing a fresh toolchain,
+running installer checks, building and inspecting the ZIP, and testing it offline on clean Windows x64.
+Complete Part A on the developer computer, then Part B on the clean test computer or VM.
 
-```powershell
-$stage = Join-Path $PWD 'work\windows-toolchain'
-New-Item -ItemType Directory -Path $stage -Force | Out-Null
-Copy-Item package.json, package-lock.json $stage
-npm.cmd ci --prefix $stage --os=win32 --cpu=x64 --ignore-scripts --no-audit --no-fund --update-notifier=false
-
-$archive = Join-Path $PWD 'work\node-v24.13.0-win-x64.zip'
-Invoke-WebRequest 'https://nodejs.org/dist/v24.13.0/node-v24.13.0-win-x64.zip' -OutFile $archive
-$expected = 'ca2742695be8de44027d71b3f53a4bdb36009b95575fe1ae6f7f0b5ce091cb88'
-if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expected) { throw 'Node ZIP SHA256 mismatch' }
-Expand-Archive $archive -DestinationPath 'work\node-extracted' -Force
-New-Item -ItemType Directory -Path "$stage\runtime" -Force | Out-Null
-Copy-Item 'work\node-extracted\node-v24.13.0-win-x64\node.exe' "$stage\runtime"
-Copy-Item 'work\node-extracted\node-v24.13.0-win-x64\LICENSE' "$stage\runtime"
-```
-
-The archive checksum above was checked against Node's official `SHASUMS256.txt`. The builder also
-requires `node.exe` SHA-256 `d14ba95cdce1ef7dc9ad3ac74949ca5db38b27378ee30f30a23cf26f9e875a11`.
-Changing Node requires a deliberate pin/checksum update and Windows revalidation.
-Install scripts are disabled: the Windows native packages are included explicitly through optional
-dependencies, so their postinstall download/fallback logic is unnecessary.
-
-## Commands and expected results
+The builder accepts a prepared toolchain path and an output directory:
 
 ```powershell
-npm.cmd run installer:check
-npm.cmd run installer:test
-npm.cmd run installer:demo
-npm.cmd run release:family -- work/windows-toolchain work/releases
+npm.cmd run release:family -- <prepared-windows-toolchain> <output-directory>
 ```
 
-- `installer:check`: independent Node TypeScript check, exit 0; Worker tsconfig remains unchanged.
-- `installer:test`: focused package validation, customer-config, migration sequence, dependency closure,
-  and ZIP tests. Independent ZIP verification requires Python: `python` on Windows, `python3` on Linux.
-- `installer:demo`: offline packaging demo of fresh, interrupted, complete and unknown migration
-  histories. Expected final message: `Симуляция провайдеров, установки и обновления появится в задачах 3–5.`
-  This is deliberately not the full setup/retry/update provider simulation required by Section 7;
-  that requirement remains pending until the corresponding behavior exists.
-- `release:family`: emits `Release 1: ... files; ...zip`, a ZIP, SHA256SUMS.txt and the inspected
-  package directory under `work/releases/family-finance-1-windows-x64/`. No existing output release
-  is overwritten. Use a new output parent for a local rebuild. Nothing is uploaded.
-
-The ZIP uses fixed timestamps and sorted paths and needs no external archiver to build. Validation
-finishes before atomic publication of the output directory. Failed builds remove their staging directory.
-Checksums are adjacent developer/distribution files, not an extra installer version manifest.
-
-## Remaining owner check: clean Windows x64
-
-Use a supported clean Windows x64 machine/user profile without Node/npm/Git or developer credentials.
-Copy only the generated ZIP, extract into a path containing spaces and Cyrillic characters,
-disconnect the network, then double-click `Start setup.cmd`.
-
-Expected: `Комплект релиза 1 проверен. Миграций: 5.` followed by the explicit notice that the
-installer is unavailable. The launcher does not open a browser yet and pauses so the result stays visible.
-Move the extracted folder and repeat. Remove a copied migration or Wrangler native file and repeat:
-the launcher must report an incomplete package, exit nonzero and pause.
-
-For the bundled runtime/CLI check, run these **offline** commands from that extracted folder:
-
-```powershell
-.\runtime\node.exe --version
-$env:WRANGLER_SEND_METRICS = 'false'
-$env:WRANGLER_HIDE_BANNER = 'true'
-.\runtime\node.exe .\wrangler\node_modules\wrangler\bin\wrangler.js --version
-.\runtime\node.exe .\wrangler\node_modules\wrangler\bin\wrangler.js d1 migrations apply --help
-.\wrangler\node_modules\@cloudflare\workerd-windows-64\bin\workerd.exe --version
-.\wrangler\node_modules\wrangler\node_modules\@esbuild\win32-x64\esbuild.exe --version
-```
-
-Expected Node `v24.13.0`, Wrangler `4.133.0`, workerd `2026-09-16` (package `1.20260916.1`),
-esbuild `0.28.1`, and command help without dependency installation.
-Record Windows version, outputs, and any missing system-library errors. OAuth, actual D1 migrations,
-Worker deployment and Telegram delivery are not part of this offline check. Full provider and
-clean-machine setup/update rehearsal remains Tasks 3–6 and Section 7; do not mark the pilot ready.
+Each successful build publishes `family-finance-1-windows-x64/` containing the ZIP, `SHA256SUMS.txt`
+and the unpacked `package/` directory. An existing release directory is not overwritten.
+The ZIP uses fixed timestamps and sorted paths and needs no external archiver to build.
+Failed builds remove their staging directory. Checksums are adjacent distribution files,
+not an extra installer version manifest.

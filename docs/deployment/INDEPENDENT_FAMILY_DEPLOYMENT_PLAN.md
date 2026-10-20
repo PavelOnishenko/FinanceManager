@@ -574,7 +574,8 @@ Do not deploy test resources into the existing production account/configuration 
 ### Task 2: Generate reusable release artifacts
 
 Status: implementation prepared on October 17, 2026; clean Windows x64 acceptance remains pending.
-See [release build instructions and remaining checks](FAMILY_RELEASE_BUILD.md). The preliminary launcher validates
+See [release build instructions](FAMILY_RELEASE_BUILD.md) and the [step-by-step acceptance checklist](FAMILY_RELEASE_ACCEPTANCE.md).
+The preliminary launcher validates
 the package and clearly reports that setup/update is unavailable until Tasks 3–6. No provider operations were run.
 
 - [x] Add the release builder and installer-specific Node tsconfig without mixing Node types into the Worker tsconfig.
