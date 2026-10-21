@@ -423,7 +423,8 @@ to `/tmp` because the default home configuration directory was unavailable. No r
 7. Each family member sends `/start` to the new bot. Before approval, it responds with their Telegram ID.
 8. Enter the two Telegram IDs and display names in the wizard, review them, and click **Добавить участников**.
 9. Both members send `/start` again. Add one sample expense, view it from the other account, then edit and delete it.
-10. Close the wizard. Keep the small local file containing the Cloudflare account ID, D1 database ID, and Worker name.
+10. Close the wizard. Back up the small file that the installer saved with the Cloudflare account ID, D1 database ID,
+    and Worker name. The owner instructions must explain where to find it and where to put it back if needed.
 
 After setup, either member manages categories from the bot's **Категории** menu.
 The owner changes the display currency through **Изменить валюту** in the installer; old numeric amounts stay unchanged.
@@ -502,15 +503,41 @@ The currency label and finance timezone live only in the customer's D1 `instance
 for display and changes; do not store a second copy in local instance state.
 Do not place instance state in the source checkout or release archive. Treat participant IDs/names as private owner data.
 Use stored resource IDs on retry; never infer ownership from a name alone or recreate a missing resource silently.
-If database creation has an unknown outcome and its ID was not saved, show any matching resource for explicit owner
-selection and verification; never adopt it automatically or create another database without resolving the ambiguity.
-If the local identifiers are lost, let the owner explicitly select the existing resources after Cloudflare authorization
-and verify their bindings and identity before saving them; never silently start a new installation.
+If database creation has an unknown outcome and its ID was not saved, stop and explain that manual help is needed
+to check whether the database was created and recover its ID. Do not adopt a database by name or create another one
+until the outcome is known. Use the recovery procedure below if the file containing the identifiers is lost.
 
 Cloudflare OAuth credentials may remain in Wrangler's supported local credential store on the owner's computer.
 Keep the token form and generated webhook secret in memory only while setup needs them.
 If setup is restarted and needs a secret again, ask for the Telegram token and follow a documented secret-recovery step.
 Long-lived bot secrets belong in the customer's Worker secret storage.
+
+### Keeping account access and recovering the saved file
+
+The installer saves the three identifiers automatically. The owner does not need to type them or understand what each one means
+during normal use. Ask the owner to keep a backup of this file outside the extracted release folder. It contains identifiers,
+not passwords, OAuth tokens, the Telegram bot token, or financial records. Backing up this file does not back up the D1 database.
+
+Losing this file does not delete the deployed Worker or database and does not stop an already working bot.
+It prevents the installer from knowing which existing resources to use. For the MVP, recovery is a manual support procedure;
+do not build a screen for choosing existing Workers and databases or automatic recovery of the identifiers.
+
+If the owner has a backup, the instructions should explain how to restore it to the installer's local data directory.
+Otherwise, the owner signs in to their Cloudflare account in a browser, with guidance if needed. Find the existing Worker,
+read the database ID from its `DB` binding, and recover the account ID and Worker name. Help the owner restore these three
+values in the local file. The owner performs the steps in their own account; support does not require sharing account
+credentials or bot tokens, or adding the developer as an account member. On the next run, the installer must verify
+the account, Worker, and database connection before changing anything.
+
+When an update or maintenance action cannot read the saved identifiers, stop and explain how to restore the file or get help.
+Do not treat this as permission to create a replacement installation. A new installation still requires the owner's explicit choice.
+
+Account access is separate from this file. Ask the owner to keep access to the Cloudflare account they used for setup.
+They may use Google sign-in if they prefer, but this is not a product requirement. Google sign-in does not restore the local file;
+continued access to the Cloudflare account lets the owner recover the identifiers manually. If Wrangler's authorization expires
+or is lost, ask the owner to sign in again. Do not recreate cloud resources because a login needs to be renewed.
+
+### Local browser security and diagnostics
 
 Bind the local server to loopback only. Require an unguessable per-launch session and validate request origin/host for mutations.
 Disable cross-origin access, use POST for mutations, and keep session tokens out of URLs sent to external providers and diagnostic logs.
@@ -603,9 +630,10 @@ Acceptance: the ZIP runs on a clean Windows x64 machine without developer tools 
 
   - Let the owner sign in to Cloudflare and choose an account. Use that authorization for subsequent calls.
     Prevent environment variables or the developer's project files from silently overriding the owner's login or chosen account.
-  - Create a D1 database during a new installation. When setup is tried again, find the database and Worker created during
-    the earlier attempt. If the saved identifiers are lost, let the owner choose their existing database and Worker.
-    Check their identifiers and confirm that the Worker uses the chosen database. Obtain the Worker's URL from Cloudflare.
+  - Create a D1 database during a new installation. When setup is tried again, use the saved identifiers to check the database
+    and Worker created during the earlier attempt. Confirm that the Worker uses that database and obtain its URL from Cloudflare.
+    If the saved file is lost or a database ID was never saved after an uncertain creation result, stop and provide instructions
+    for manual recovery. Do not build a screen for selecting existing resources.
   - Read the names of migrations already applied to the database and compare them with the migration files in the release package.
     Use Wrangler to apply the migrations that have not been applied yet.
   - Read and validate the currency and timezone stored in the database, and change them when the owner requests it.
@@ -674,8 +702,8 @@ No production finance behavior needs to change for this enrollment approach.
   or invalid; a missing row is a repair condition, not a new installation.
 - [ ] Read the installed release from the deployed Worker and the schema state from D1, then display installed/target
   versions and require target N+1 before modifying anything.
-- [ ] If local identifiers are absent, require explicit selection and verification of the existing Cloudflare resources;
-  do not create a replacement database.
+- [ ] If the saved identifiers are missing, stop the update and explain how to restore the file from a backup or recover it
+  with manual help. Do not create a replacement database or provide a recovery selection screen in the MVP.
 - [ ] For unchanged code/schema, report **Уже обновлено** without executing another migration/deploy.
 - [ ] Apply only pending migration files. Preserve historical migration contents and their names.
 - [ ] Deploy the target Worker with the existing binding and secrets. Do not repeat initial `setWebhook` or membership seeding.
@@ -722,8 +750,11 @@ a skipped release is rejected with instructions to install the intermediate ZIP 
 - [ ] Write `docs/deployment/FAMILY_INSTALLATION.md` in Russian with BotFather steps, setup/update instructions,
   and expected screens. Write owner-facing release notes in Russian too; developer documentation may remain in English.
 - [ ] Explain the pilot's data-loss risk and absence of installer-managed backups/restores in the owner instructions.
-- [ ] Document how to preserve the three local identifiers, reselect verified resources if they are lost, reauthorize
-  Cloudflare, and request help using redacted diagnostics.
+- [ ] Explain where the installer saves the file containing the three identifiers, how to back it up, and how to restore it.
+  Describe the manual support procedure if no backup is available. Explain that losing this file does not delete cloud data
+  or stop the bot, and that this file is not a database backup.
+- [ ] Explain how to retain access to the owner's Cloudflare account, sign in again when authorization expires,
+  and request help without sharing credentials, bot tokens, or expense contents.
 - [ ] Measure setup duration and update duration in the clean-machine rehearsal.
 
 Acceptance: the rehearsal can be completed by following only the owner instructions, without reading this developer plan.
@@ -739,6 +770,8 @@ Required scenarios:
 
 - Fresh installation, two distinct participants, invalid token, wrong account, conflicting resource name, and existing unrelated webhook.
 - Process restart after D1 creation, after migrations, after secrets, and after deployment; no duplicate resources or data reset.
+- An update or maintenance action with a missing identifiers file stops with recovery instructions and creates no resources.
+  After the owner restores the file, the installer checks the account, Worker, and database before continuing.
 - Cloudflare/Telegram timeouts with an unknown mutation outcome, expired authorization, and a second concurrent wizard.
 - Old release with declared test expenses upgraded to new code and an additive migration, with all initial values declared in the test.
 - An adjacent update applies each pending migration once; a repeat update leaves rows, source action keys, and participants intact.
