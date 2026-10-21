@@ -143,7 +143,8 @@ assert.match(fixture.text(), /Расходы: 2026-02-28 — 2026-03-01/);
 
 ## Language and naming
 
-- Use plain, natural English in documentation, comments, and code names.
+These rules are applicable to both English and Russian languages.
+- Use plain, natural language in documentation, comments, and code names.
   Prefer familiar words and explicit actions over abstract labels or compressed shorthand.
 - Do not compress a whole action or explanation into a single noun.
   For example, write “check which steps already succeeded before trying again”
