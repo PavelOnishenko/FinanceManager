@@ -622,52 +622,56 @@ Acceptance: the ZIP runs on a clean Windows x64 machine without developer tools 
 
 ### Task 3: Implement provider adapters and instance state
 
-- [ ] Add functions that call Cloudflare and Telegram for the actions described in Tasks 4–6: install the bot,
-  add participants, update the bot, check the connection, and change the currency or timezone.
-  Task 1 shows which commands and API calls have been tested. Implement only those needed for these actions.
+Add the functions that Tasks 4–6 need to call Cloudflare and Telegram. Those tasks will use them to install and update
+the bot, add participants, check the connection, and change the currency or timezone.
+Task 1 records commands and API calls that were tested; it does not require implementing every command in the proof note.
+Each function should do a specific job below. Do not expose arbitrary SQL or shell commands through a function or UI endpoint.
 
-  The installer needs to do the following:
+Required provider operations:
 
-  - Let the owner sign in to Cloudflare and choose an account. Use that authorization for subsequent calls.
-    Prevent environment variables or the developer's project files from silently overriding the owner's login or chosen account.
-  - Create a D1 database during a new installation. When setup is tried again, use the saved identifiers to check the database
-    and Worker created during the earlier attempt. Confirm that the Worker uses that database and obtain its URL from Cloudflare.
-    If the saved file is lost or a database ID was never saved after an uncertain creation result, stop and provide instructions
-    for manual recovery. Do not build a screen for selecting existing resources.
-  - Read the names of migrations already applied to the database and compare them with the migration files in the release package.
-    Use Wrangler to apply the migrations that have not been applied yet.
-  - Read and validate the currency and timezone stored in the database, and change them when the owner requests it.
-    Add the participants chosen by the owner, then read their records from the database to confirm they were saved correctly.
-    Pass user-supplied values as SQL parameters. For a new installation, also check the initial database contents described in Task 4.
-  - Deploy the Worker included in the release package, with the chosen database and the release number in its configuration.
-    Set the Telegram bot token and webhook secret during setup. Preserve both secrets when updating the Worker.
-  - Read Cloudflare's information about the active Worker version to check the database it uses, its release number,
-    and the names of its secrets. Call the Worker's health endpoint to check whether it is running correctly.
-  - Use Telegram's `getMe` to check which bot the supplied token belongs to, `getWebhookInfo` to check where Telegram
-    sends its updates, and `setWebhook` to connect the bot to the Worker. Ask for the token when needed and do not save it locally.
+- [ ] Let the owner sign in to Cloudflare, list the accounts they can access, and use the account they choose.
+  Prevent inherited environment variables or the developer's project files from overriding that login or account.
+  Handle Wrangler profiles and OAuth tokens inside these calls. If authorization expires, ask the owner to sign in again.
+- [ ] Create a D1 database for a new installation. Find the existing database by its saved ID and obtain its name from Cloudflare.
+- [ ] Read Cloudflare's information about the active Worker to check its identity, release number, database binding,
+  and secret names. Obtain the Worker's URL and check that it uses the expected database.
+- [ ] Read the names of applied migrations and compare them with the release package. Use Wrangler to apply the remaining
+  migrations. This comparison also tells the installer whether anything remains to be applied; no separate `migrations list`
+  adapter is needed.
+- [ ] Read and validate the saved currency and timezone, change them when requested, and read them again to confirm the change.
+- [ ] Add or update the participants chosen by the owner and read their records to confirm they were saved correctly.
+  Pass user-supplied values as SQL parameters in both settings and participant queries.
+- [ ] Check the initial contents of a new database as described in Task 4. Do not add operations for the manual expense
+  journeys or queries used only to verify Task 1.
+- [ ] Deploy the Worker already compiled by Task 2's release builder, with the chosen database and release number
+  in its configuration. Set the two Telegram secrets during setup and preserve them on updates. Use the active Worker
+  information above to check secret names; no separate `secret list` adapter is needed. Call the Worker's health endpoint.
+- [ ] Use Telegram's `getMe` to check which bot the token belongs to, `getWebhookInfo` to check where Telegram sends updates,
+  and `setWebhook` to connect the bot to the Worker. Ask for the token when needed and do not save it locally.
 
-  Each function should perform one of these specific tasks. Do not provide a function or UI endpoint that accepts arbitrary
-  SQL or shell commands.
+Rules for running these operations and keeping the local file:
 
-  The release builder in Task 2 compiles the Worker. The installer deploys that file without compiling it again.
-  Compare the applied migration names with the packaged files to determine what remains to be applied; a separate
-  `migrations list` adapter is unnecessary. The active Worker version already includes secret names, so a separate
-  `secret list` adapter is also unnecessary. Handle Wrangler profiles and OAuth tokens inside the sign-in and provider calls;
-  they do not need separate wizard actions. When authorization expires, asking the owner to sign in again is sufficient.
+- [ ] Run the bundled Wrangler using the bundled Node executable. Pass arguments as an array and set `shell: false`.
+  Supply secrets through supported stdin or a temporary file that only the current user can read. Never put secrets
+  in command-line arguments. Remove tokens and other secrets from errors and diagnostics.
+- [ ] Read JSON responses where supported and check for provider errors. If a command returns only text, test that the installer
+  reads it correctly with the Wrangler version included in the package.
+- [ ] Save only the Cloudflare account ID, D1 database ID, and Worker name. Save each as soon as it is known, and choose
+  and save the Worker name before creating resources. If that name belongs to an unrelated Worker, stop and explain the conflict.
+  Do not keep a separate local record of completed steps.
+- [ ] Set time limits for provider calls and handle interrupted or cancelled calls. After a failure or restart, use the operations
+  above to check which steps succeeded before making more changes. Do not repeat a completed step or assume that a timed-out
+  call failed. If database creation may have succeeded but its ID was not saved, stop rather than creating another database.
+- [ ] If identifiers needed to continue are missing, stop and explain how to restore the file or get manual help.
+  Follow [the recovery procedure](#keeping-account-access-and-recovering-the-saved-file); do not build a resource selection screen.
+- [ ] Leave the Worker and database in place when setup fails. Explain which step failed and what the owner can do next.
 
-  Keep the manual expense journeys and queries used only to verify Task 1 out of the installer. The initial database checks
-  required by Task 4 still belong in it. Before using behavior that Task 1 did not prove, verify that it works. In particular,
-  check that remote migrations can run without terminal input and that changing an existing participant is safe to repeat.
-- [ ] Invoke the bundled Node/Wrangler executable with argument arrays and `shell: false`.
-  Supply secrets through supported stdin or private temporary input files, never command-line arguments.
-- [ ] Parse structured provider output where supported; test any unavoidable text parser against the pinned version.
-- [ ] Implement timeouts, redaction, cancellation handling, and reconciliation after an operation times out with an unknown result.
-- [ ] Persist only the three resource identifiers; derive completed steps from verified remote state on retry.
-- [ ] On retry after a failure or restart, query remote resources and migration state before repeating a mutation.
-- [ ] Choose a unique Worker name before resource creation and verify IDs/bindings on retry. Treat same-name unrelated resources as a conflict.
-- [ ] Do not delete resources automatically after setup fails. Explain the failed step and let the owner retry safely.
+Before relying on behavior that Task 1 did not prove, verify it. In particular, check that remote migrations can run
+without terminal input and that changing an existing participant is safe to repeat.
 
-Acceptance: fake-provider tests demonstrate wrong-account rejection, safe retry, no duplicate D1 creation, and secret redaction.
+Acceptance: tests using simulated providers show that the installer rejects the wrong account, resumes without repeating
+completed changes or creating duplicate databases, and keeps secrets out of errors and diagnostics. Missing identifiers
+stop the operation with recovery instructions. These tests do not replace verification of the required Cloudflare and Telegram calls.
 
 ### Task 4: Implement fresh installation and participant enrollment
 
