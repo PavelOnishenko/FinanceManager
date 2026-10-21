@@ -37,6 +37,8 @@ First remove the existing alias behavior, then make categories editable in the b
 Add expense history browsing by month and arbitrary date range before continuing installer work.
 Then let another family use its own instance without giving the project developer administrative access to its data.
 The family should not need to run commands, write SQL, install developer tools, or configure Cloudflare resources manually.
+The pilot is for one known family whose owner is not expected to administer Cloudflare or databases.
+Support one available Cloudflare account. Rare unsupported cases can use manual support instead of additional wizard screens.
 
 Use the following model for the first release:
 
