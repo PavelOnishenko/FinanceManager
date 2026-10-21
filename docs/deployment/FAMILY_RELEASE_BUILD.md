@@ -1,7 +1,7 @@
 # Family release artifacts (installer Task 2)
 
-Status: packaging implemented; clean Windows x64 acceptance is pending. This is a preliminary
-release, not an operational installer. Tasks 3–6 supply provider adapters, installation, updates,
+Status: Task 2 complete. The owner confirmed all Part A/B acceptance checks passed on two machines on October 21, 2026.
+This is a preliminary release, not an operational installer. Tasks 3–6 supply provider adapters, installation, updates,
 and the browser UI. No Cloudflare or Telegram calls are made by the builder, launcher, or packaging demo.
 
 ## Inputs and layout

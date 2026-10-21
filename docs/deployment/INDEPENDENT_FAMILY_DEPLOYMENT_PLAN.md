@@ -6,7 +6,7 @@ and merged; the owner confirmed live verification in demo and production on Octo
 P4 (expense history by period) is complete: the owner confirmed release and live verification on October 16, 2026.
 The documentation was approved in PR #5; implementation is in PR #6. See [P4 verification](../design/HISTORY_BROWSING.md).
 Installer Task 1 is complete with owner-confirmed verification on October 17, 2026.
-Installer Task 2 packaging is implemented with clean-Windows acceptance pending; Tasks 3-6 remain pending.
+Installer Task 2 is complete with owner-confirmed Part A/B acceptance on two machines on October 21, 2026; Tasks 3-6 remain pending.
 The subsequent P1 repository-result refactor passed 83/83 tests on October 12, 2026. After removing nested ternaries,
 three focused tests, the type check, and the dry-run build passed. Local tests/check/build are authorized;
 commands accessing remote resources require an explicit owner decision.
@@ -15,8 +15,8 @@ obsolete category-index callbacks are rejected without a legacy ID snapshot. 89/
 Repository inspection and provider documentation review: October 10, 2026.
 
 This document is a standalone implementation handoff. Checked boxes describe completed work; unchecked boxes describe future work.
-Installer packaging and the customer update flow remain unverified. Installer Task 1 is complete:
-owner-run disposable separate-account provider checks and the manual finance journey are recorded below.
+Installer toolchain proof and packaging (Tasks 1–2) are complete. The customer installation/update flow remains unverified;
+its implementation and acceptance belong to Tasks 3–6.
 
 ## How to read and implement this plan
 
@@ -550,7 +550,7 @@ and pinned Wrangler 4.133.0 using a disposable bot and separate Cloudflare accou
 OAuth isolation, migrations/retry, parameter-bound settings writes, deploy/redeploy, secret preservation,
 and release/binding/migration readback passed. The owner also confirmed participant enrollment and expense
 create/edit/delete with history/statistics; final D1 readback showed zero expenses, one enabled member,
-and preserved GBP/Europe/London settings. Task 1 is complete. Windows packaging remains Task 2 work.
+and preserved GBP/Europe/London settings. Task 1 is complete. Windows packaging acceptance is complete under Task 2.
 
 - [x] Read the referenced provider documentation and inspect the pinned Wrangler CLI's actual help.
 - [x] Reproduce the existing manual deployment recipe using a disposable bot and a separate test Cloudflare account.
@@ -573,7 +573,7 @@ Do not deploy test resources into the existing production account/configuration 
 
 ### Task 2: Generate reusable release artifacts
 
-Status: implementation prepared on October 17, 2026; clean Windows x64 acceptance remains pending.
+Status: complete. On October 21, 2026, the owner confirmed all Part A and Part B acceptance checks passed on two corresponding machines.
 See [release build instructions](FAMILY_RELEASE_BUILD.md) and the [step-by-step acceptance checklist](FAMILY_RELEASE_ACCEPTANCE.md).
 The preliminary launcher validates
 the package and clearly reports that setup/update is unavailable until Tasks 3–6. No provider operations were run.
