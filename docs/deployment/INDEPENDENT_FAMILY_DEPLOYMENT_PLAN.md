@@ -595,7 +595,26 @@ Acceptance: the ZIP runs on a clean Windows x64 machine without developer tools 
 
 ### Task 3: Implement provider adapters and instance state
 
-- [ ] Build narrow adapters for the exact operations in Task 1; avoid a general-purpose Cloudflare abstraction or SQL console.
+- [ ] Build narrow adapters only for the MVP workflows in Tasks 4–6: installation, participant enrollment, update,
+  connection checks, and currency/timezone changes. Use Task 1's verified calls as implementation evidence,
+  not as a requirement to implement every probe command. Required capabilities are:
+
+  | Capability | Required behavior |
+  | --- | --- |
+  | Authorization and account selection | Authorize with isolated Wrangler credentials, enumerate accounts, and verify the selected account. |
+  | Resources | Create D1; find existing databases/Workers for retry or owner selection; verify IDs, bindings, and Worker URL. |
+  | Migration state and application | Read applied migration names, compare them with packaged files, and apply pending migrations through Wrangler. |
+  | Instance configuration | Read/validate and update settings; enroll/read back participants with bound parameters; verify Task 4's fresh-install baseline. |
+  | Worker deployment and secrets | Deploy the prebuilt Worker with its binding/release variable; set both secrets at setup and preserve them on update. |
+  | Connection and release checks | Read active Worker metadata for resource identity, release, and secret names; check Worker health. |
+  | Telegram setup and diagnostics | Verify bot identity with `getMe`, inspect `getWebhookInfo`, and configure `setWebhook`; require a temporarily supplied token. |
+
+  Keep SQL and provider commands internal to these capabilities; do not expose arbitrary SQL or a generic command runner.
+  Build the Worker only in Task 2's release builder. Derive pending migrations from applied history and reuse active-version
+  metadata for secret names; do not add separate pending-migration or secret-list adapters. OAuth profile/token handling
+  is an internal authorization detail. Manual finance journeys and rehearsal-only queries do not become installer operations.
+  Prove any required behavior not established by Task 1 before relying on it, including noninteractive remote migration
+  application and safe participant updates; reauthorization is sufficient when credentials expire.
 - [ ] Invoke the bundled Node/Wrangler executable with argument arrays and `shell: false`.
   Supply secrets through supported stdin or private temporary input files, never command-line arguments.
 - [ ] Parse structured provider output where supported; test any unavoidable text parser against the pinned version.
