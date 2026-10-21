@@ -10,5 +10,11 @@
     "noEmit": true,
     "types": ["node"]
   },
-  "include": ["./**/*.ts", "../../scripts/build-family-release.ts", "../../tests/suites/unit/familyRelease.test.ts"]
+  "include": [
+    "./**/*.ts",
+    "../../scripts/build-family-release.ts",
+    "../../scripts/check-installer-wrangler.ts",
+    "../../tests/suites/unit/familyRelease.test.ts",
+    "../../tests/suites/integration/installer/**/*.test.ts"
+  ]
 }

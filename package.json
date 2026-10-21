@@ -14,7 +14,8 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "installer:check": "tsc -p tools/family-installer/tsconfig.json",
-    "installer:test": "tsx --test tests/suites/unit/familyRelease.test.ts",
+    "installer:test": "tsx --test tests/suites/unit/familyRelease.test.ts \"tests/suites/integration/installer/**/*.test.ts\"",
+    "installer:verify-wrangler": "tsx scripts/check-installer-wrangler.ts",
     "installer:demo": "tsx tools/family-installer/demo.ts",
     "release:family": "tsx scripts/build-family-release.ts"
   },
