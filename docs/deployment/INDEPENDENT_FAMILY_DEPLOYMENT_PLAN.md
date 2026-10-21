@@ -37,6 +37,8 @@ First remove the existing alias behavior, then make categories editable in the b
 Add expense history browsing by month and arbitrary date range before continuing installer work.
 Then let another family use its own instance without giving the project developer administrative access to its data.
 The family should not need to run commands, write SQL, install developer tools, or configure Cloudflare resources manually.
+The pilot is for one known family whose owner is not expected to administer Cloudflare or databases.
+Support one available Cloudflare account. Rare unsupported cases can use manual support instead of additional wizard screens.
 
 Use the following model for the first release:
 
@@ -416,14 +418,16 @@ to `/tmp` because the default home configuration directory was unavailable. No r
 1. Open the official BotFather in Telegram, send `/newbot`, choose a name and available username, and obtain the bot token.
 2. Download the trusted release ZIP, extract it, and launch `Start setup.cmd`.
 3. Click **Подключить Cloudflare**. The browser opens Cloudflare's authorization flow; register/sign in and approve access.
-4. If more than one Cloudflare account is available, choose the intended account in the wizard.
+4. The wizard uses the single available Cloudflare account. If there are no accounts or more than one,
+   it stops and asks the owner to get help; the MVP has no account selection screen.
 5. Paste the Telegram token. The wizard shows the bot username and asks the owner to confirm it.
 6. Choose the display currency label and finance timezone, review the default categories, then click **Установить**.
    Wait for database creation, migrations, settings-row initialization, Worker deployment, secrets, and webhook setup.
 7. Each family member sends `/start` to the new bot. Before approval, it responds with their Telegram ID.
 8. Enter the two Telegram IDs and display names in the wizard, review them, and click **Добавить участников**.
 9. Both members send `/start` again. Add one sample expense, view it from the other account, then edit and delete it.
-10. Close the wizard. Keep the small local file containing the Cloudflare account ID, D1 database ID, and Worker name.
+10. Close the wizard. Back up the small file that the installer saved with the Cloudflare account ID, D1 database ID,
+    and Worker name. The owner instructions must explain where to find it and where to put it back if needed.
 
 After setup, either member manages categories from the bot's **Категории** menu.
 The owner changes the display currency through **Изменить валюту** in the installer; old numeric amounts stay unchanged.
@@ -483,34 +487,19 @@ Use plain HTML/CSS/browser JavaScript for the wizard unless a demonstrated need 
 The local Node service controls providers. The browser is only a UI; it never invokes a privileged generic shell or SQL endpoint.
 Suggested operation API: status, connect, validate bot, install, enable participants, update, check connection.
 Run only one wizard action at a time. Disable action buttons while it runs; keep progress/status available.
-Enforce the same exclusion in the local Node service, including across browser tabs and two launched wizard processes.
+Enforce this in the local Node service across browser tabs. Allow only one installer process to run;
+if the owner opens it again, show that the installer is already open.
 There is no pause control. A later retry after a failure or process restart first checks what actually completed.
 
 ### Local data and secrets
 
-Use a stable per-user directory such as `%LOCALAPPDATA%\FamilyFinanceBot`, outside extracted release directories.
-The first version manages one family instance per Windows user; supporting an instance selector is later work.
-Persist only the Cloudflare account ID, D1 database ID, and Worker name. Save each identifier as soon as it is known;
-choose and save the Worker name before creating resources so a retry can recognize an uncertain creation result.
-Use atomic file replacement and a cross-process operation lock. Do not persist an operation journal or progress checkpoints.
-On each launch or retry, read the current Worker release/version and configuration from Cloudflare and migration history
-from D1. Read the Worker URL and D1 name from Cloudflare when needed. Compare applied migration names with the numbered
-files in the package; do not keep a second local migration ledger.
-If remote release or migration state cannot be determined,
-stop the update rather than guessing. Keep progress and sanitized errors only in memory while the wizard is running.
-The currency label and finance timezone live only in the customer's D1 `instance_settings` row. Read them from D1
-for display and changes; do not store a second copy in local instance state.
-Do not place instance state in the source checkout or release archive. Treat participant IDs/names as private owner data.
-Use stored resource IDs on retry; never infer ownership from a name alone or recreate a missing resource silently.
-If database creation has an unknown outcome and its ID was not saved, show any matching resource for explicit owner
-selection and verification; never adopt it automatically or create another database without resolving the ambiguity.
-If the local identifiers are lost, let the owner explicitly select the existing resources after Cloudflare authorization
-and verify their bindings and identity before saving them; never silently start a new installation.
+The installer saves only the Cloudflare account ID, D1 database ID, and Worker name in a stable per-user directory
+outside the release folder. Currency and timezone remain in D1; bot secrets remain in the owner's Worker.
+The MVP manages one installation per Windows user. If its saved file is lost, use a backup or manual support;
+do not build a recovery selection screen.
+See [Task 3's implementation plan](INSTALLER_TASK_3.md) for file handling, authorization, and recovery requirements.
 
-Cloudflare OAuth credentials may remain in Wrangler's supported local credential store on the owner's computer.
-Keep the token form and generated webhook secret in memory only while setup needs them.
-If setup is restarted and needs a secret again, ask for the Telegram token and follow a documented secret-recovery step.
-Long-lived bot secrets belong in the customer's Worker secret storage.
+### Local browser security and diagnostics
 
 Bind the local server to loopback only. Require an unguessable per-launch session and validate request origin/host for mutations.
 Disable cross-origin access, use POST for mutations, and keep session tokens out of URLs sent to external providers and diagnostic logs.
@@ -595,17 +584,14 @@ Acceptance: the ZIP runs on a clean Windows x64 machine without developer tools 
 
 ### Task 3: Implement provider adapters and instance state
 
-- [ ] Build narrow adapters for the exact operations in Task 1; avoid a general-purpose Cloudflare abstraction or SQL console.
-- [ ] Invoke the bundled Node/Wrangler executable with argument arrays and `shell: false`.
-  Supply secrets through supported stdin or private temporary input files, never command-line arguments.
-- [ ] Parse structured provider output where supported; test any unavoidable text parser against the pinned version.
-- [ ] Implement timeouts, redaction, cancellation handling, and reconciliation after an operation times out with an unknown result.
-- [ ] Persist only the three resource identifiers; derive completed steps from verified remote state on retry.
-- [ ] On retry after a failure or restart, query remote resources and migration state before repeating a mutation.
-- [ ] Choose a unique Worker name before resource creation and verify IDs/bindings on retry. Treat same-name unrelated resources as a conflict.
-- [ ] Do not delete resources automatically after setup fails. Explain the failed step and let the owner retry safely.
+Prepare the functions that Tasks 4–6 need to call Cloudflare and Telegram, and save the installation's three identifiers.
+Implement only the operations needed by the MVP.
 
-Acceptance: fake-provider tests demonstrate wrong-account rejection, safe retry, no duplicate D1 creation, and secret redaction.
+Follow [the Task 3 plan in Russian](INSTALLER_TASK_3.md). It defines subtasks 3.1–3.6, their dependencies,
+checks, and the rules for account access and manual recovery. Keep detailed Task 3 requirements in that file.
+
+Acceptance: all six subtasks are complete and checked. The functions are ready for the installation flow in Task 4;
+they do not yet constitute a complete setup or update wizard.
 
 ### Task 4: Implement fresh installation and participant enrollment
 
@@ -618,8 +604,6 @@ Acceptance: fake-provider tests demonstrate wrong-account rejection, safe retry,
 - [ ] Read the settings row seeded by migration `0005` and show its current values. Require owner confirmation or change;
   update the row with the chosen values using parameter-bound SQL and verify it by reading it back.
   On retry, read the existing row and keep its values; do not overwrite it with migration seeds or earlier form values.
-- [ ] Verify a clean baseline: the expected default categories and normalized names, selected display currency and finance timezone,
-  zero members, and zero expenses. Derive expected counts from release fixtures rather than fixing 19 forever.
 - [ ] Deploy the bundled Worker without registering a webhook yet, so the named Worker exists before setting secrets.
 - [ ] Generate a cryptographically random Telegram-compatible webhook secret and set both required Worker secrets.
 - [ ] Verify health, then register `/telegram` using Telegram `setWebhook` and the matching secret.
@@ -640,8 +624,7 @@ No production finance behavior needs to change for this enrollment approach.
   or invalid; a missing row is a repair condition, not a new installation.
 - [ ] Read the installed release from the deployed Worker and the schema state from D1, then display installed/target
   versions and require target N+1 before modifying anything.
-- [ ] If local identifiers are absent, require explicit selection and verification of the existing Cloudflare resources;
-  do not create a replacement database.
+- [ ] If the saved identifiers are missing, stop the update and follow [Task 3's recovery procedure](INSTALLER_TASK_3.md#если-файл-потерян).
 - [ ] For unchanged code/schema, report **Уже обновлено** without executing another migration/deploy.
 - [ ] Apply only pending migration files. Preserve historical migration contents and their names.
 - [ ] Deploy the target Worker with the existing binding and secrets. Do not repeat initial `setWebhook` or membership seeding.
@@ -688,8 +671,8 @@ a skipped release is rejected with instructions to install the intermediate ZIP 
 - [ ] Write `docs/deployment/FAMILY_INSTALLATION.md` in Russian with BotFather steps, setup/update instructions,
   and expected screens. Write owner-facing release notes in Russian too; developer documentation may remain in English.
 - [ ] Explain the pilot's data-loss risk and absence of installer-managed backups/restores in the owner instructions.
-- [ ] Document how to preserve the three local identifiers, reselect verified resources if they are lost, reauthorize
-  Cloudflare, and request help using redacted diagnostics.
+- [ ] Include owner instructions for file backup, account access, and manual recovery as defined in
+  [Task 3](INSTALLER_TASK_3.md#если-файл-потерян).
 - [ ] Measure setup duration and update duration in the clean-machine rehearsal.
 
 Acceptance: the rehearsal can be completed by following only the owner instructions, without reading this developer plan.
@@ -700,11 +683,14 @@ Acceptance: the rehearsal can be completed by following only the owner instructi
 
 Keep existing application regression coverage. Add adapter fixtures and real local D1 upgrade tests for meaningful new behavior.
 Each Telegram journey should remain coherent; use named helpers for irrelevant assertion boilerplate.
+Verify that migrations create the expected default categories in migration tests, rather than querying them during each installation.
 
 Required scenarios:
 
 - Fresh installation, two distinct participants, invalid token, wrong account, conflicting resource name, and existing unrelated webhook.
 - Process restart after D1 creation, after migrations, after secrets, and after deployment; no duplicate resources or data reset.
+- An update or maintenance action with a missing identifiers file stops with recovery instructions and creates no resources.
+  After the owner restores the file, the installer checks the account, Worker, and database before continuing.
 - Cloudflare/Telegram timeouts with an unknown mutation outcome, expired authorization, and a second concurrent wizard.
 - Old release with declared test expenses upgraded to new code and an additive migration, with all initial values declared in the test.
 - An adjacent update applies each pending migration once; a repeat update leaves rows, source action keys, and participants intact.
