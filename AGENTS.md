@@ -141,6 +141,29 @@ await fixture.pressButtonNamed("1");
 assert.match(fixture.text(), /Расходы: 2026-02-28 — 2026-03-01/);
 ```
 
+## Language and naming
+
+- Use plain, natural English in documentation, comments, and code names.
+  Prefer familiar words and explicit actions over abstract labels or compressed shorthand.
+- Do not compress a whole action or explanation into a single noun.
+  For example, write “check which steps already succeeded before trying again”
+  instead of “reconcile state before retry.”
+- State who does what. Explain what happens and under which conditions rather than
+  making the reader reconstruct the meaning from a label.
+- Use full sentences in documentation and comments when they make the meaning clearer.
+  Extra words are worthwhile when they reduce the effort needed to understand the text.
+- Give variables and functions names that describe the value or action in context.
+  For example, prefer `appliedMigrationNames` over `migrationState`, and
+  `findDatabaseById` over `resolveResource`. Longer names are fine when they clarify intent.
+- Use established technical terms when they are precise and familiar to the intended reader.
+  Explain unfamiliar terms when needed; do not replace precise terms with vague everyday words.
+- Avoid strings of nouns, invented terminology, and slash-separated shortcuts such as
+  “binding/release readback.” Write out the separate actions.
+- Use tables for information that benefits from comparison. Use paragraphs or lists
+  when explaining behavior would otherwise require packing several actions into one cell.
+- Keep explanations focused. Remove repetition and unnecessary detail, but do not shorten
+  wording at the expense of clarity.
+
 ## Code style
 
 - If a list of array elements, object or type fields, or similar items spans three or more lines, put each item on its own line.
