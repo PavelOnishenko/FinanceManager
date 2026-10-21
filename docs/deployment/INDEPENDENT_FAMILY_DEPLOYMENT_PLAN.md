@@ -641,8 +641,6 @@ Required provider operations:
 - [ ] Read and validate the saved currency and timezone, change them when requested, and read them again to confirm the change.
 - [ ] Add or update the participants chosen by the owner and read their records to confirm they were saved correctly.
   Pass user-supplied values as SQL parameters in both settings and participant queries.
-- [ ] Check the initial contents of a new database as described in Task 4. Do not add operations for the manual expense
-  journeys or queries used only to verify Task 1.
 - [ ] Deploy the Worker already compiled by Task 2's release builder, with the chosen database and release number
   in its configuration. Set the two Telegram secrets during setup and preserve them on updates. Use the active Worker
   information above to check secret names; no separate `secret list` adapter is needed. Call the Worker's health endpoint.
@@ -684,8 +682,6 @@ stop the operation with recovery instructions. These tests do not replace verifi
 - [ ] Read the settings row seeded by migration `0005` and show its current values. Require owner confirmation or change;
   update the row with the chosen values using parameter-bound SQL and verify it by reading it back.
   On retry, read the existing row and keep its values; do not overwrite it with migration seeds or earlier form values.
-- [ ] Verify a clean baseline: the expected default categories and normalized names, selected display currency and finance timezone,
-  zero members, and zero expenses. Derive expected counts from release fixtures rather than fixing 19 forever.
 - [ ] Deploy the bundled Worker without registering a webhook yet, so the named Worker exists before setting secrets.
 - [ ] Generate a cryptographically random Telegram-compatible webhook secret and set both required Worker secrets.
 - [ ] Verify health, then register `/telegram` using Telegram `setWebhook` and the matching secret.
@@ -769,6 +765,7 @@ Acceptance: the rehearsal can be completed by following only the owner instructi
 
 Keep existing application regression coverage. Add adapter fixtures and real local D1 upgrade tests for meaningful new behavior.
 Each Telegram journey should remain coherent; use named helpers for irrelevant assertion boilerplate.
+Verify that migrations create the expected default categories in migration tests, rather than querying them during each installation.
 
 Required scenarios:
 
