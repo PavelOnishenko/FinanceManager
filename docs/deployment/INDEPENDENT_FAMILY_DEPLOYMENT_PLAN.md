@@ -595,26 +595,41 @@ Acceptance: the ZIP runs on a clean Windows x64 machine without developer tools 
 
 ### Task 3: Implement provider adapters and instance state
 
-- [ ] Build narrow adapters only for the MVP workflows in Tasks 4–6: installation, participant enrollment, update,
-  connection checks, and currency/timezone changes. Use Task 1's verified calls as implementation evidence,
-  not as a requirement to implement every probe command. Required capabilities are:
+- [ ] Add functions that call Cloudflare and Telegram for the actions described in Tasks 4–6: install the bot,
+  add participants, update the bot, check the connection, and change the currency or timezone.
+  Task 1 shows which commands and API calls have been tested. Implement only those needed for these actions.
 
-  | Capability | Required behavior |
-  | --- | --- |
-  | Authorization and account selection | Authorize with isolated Wrangler credentials, enumerate accounts, and verify the selected account. |
-  | Resources | Create D1; find existing databases/Workers for retry or owner selection; verify IDs, bindings, and Worker URL. |
-  | Migration state and application | Read applied migration names, compare them with packaged files, and apply pending migrations through Wrangler. |
-  | Instance configuration | Read/validate and update settings; enroll/read back participants with bound parameters; verify Task 4's fresh-install baseline. |
-  | Worker deployment and secrets | Deploy the prebuilt Worker with its binding/release variable; set both secrets at setup and preserve them on update. |
-  | Connection and release checks | Read active Worker metadata for resource identity, release, and secret names; check Worker health. |
-  | Telegram setup and diagnostics | Verify bot identity with `getMe`, inspect `getWebhookInfo`, and configure `setWebhook`; require a temporarily supplied token. |
+  The installer needs to do the following:
 
-  Keep SQL and provider commands internal to these capabilities; do not expose arbitrary SQL or a generic command runner.
-  Build the Worker only in Task 2's release builder. Derive pending migrations from applied history and reuse active-version
-  metadata for secret names; do not add separate pending-migration or secret-list adapters. OAuth profile/token handling
-  is an internal authorization detail. Manual finance journeys and rehearsal-only queries do not become installer operations.
-  Prove any required behavior not established by Task 1 before relying on it, including noninteractive remote migration
-  application and safe participant updates; reauthorization is sufficient when credentials expire.
+  - Let the owner sign in to Cloudflare and choose an account. Use that authorization for subsequent calls.
+    Prevent environment variables or the developer's project files from silently overriding the owner's login or chosen account.
+  - Create a D1 database during a new installation. When setup is tried again, find the database and Worker created during
+    the earlier attempt. If the saved identifiers are lost, let the owner choose their existing database and Worker.
+    Check their identifiers and confirm that the Worker uses the chosen database. Obtain the Worker's URL from Cloudflare.
+  - Read the names of migrations already applied to the database and compare them with the migration files in the release package.
+    Use Wrangler to apply the migrations that have not been applied yet.
+  - Read and validate the currency and timezone stored in the database, and change them when the owner requests it.
+    Add the participants chosen by the owner, then read their records from the database to confirm they were saved correctly.
+    Pass user-supplied values as SQL parameters. For a new installation, also check the initial database contents described in Task 4.
+  - Deploy the Worker included in the release package, with the chosen database and the release number in its configuration.
+    Set the Telegram bot token and webhook secret during setup. Preserve both secrets when updating the Worker.
+  - Read Cloudflare's information about the active Worker version to check the database it uses, its release number,
+    and the names of its secrets. Call the Worker's health endpoint to check whether it is running correctly.
+  - Use Telegram's `getMe` to check which bot the supplied token belongs to, `getWebhookInfo` to check where Telegram
+    sends its updates, and `setWebhook` to connect the bot to the Worker. Ask for the token when needed and do not save it locally.
+
+  Each function should perform one of these specific tasks. Do not provide a function or UI endpoint that accepts arbitrary
+  SQL or shell commands.
+
+  The release builder in Task 2 compiles the Worker. The installer deploys that file without compiling it again.
+  Compare the applied migration names with the packaged files to determine what remains to be applied; a separate
+  `migrations list` adapter is unnecessary. The active Worker version already includes secret names, so a separate
+  `secret list` adapter is also unnecessary. Handle Wrangler profiles and OAuth tokens inside the sign-in and provider calls;
+  they do not need separate wizard actions. When authorization expires, asking the owner to sign in again is sufficient.
+
+  Keep the manual expense journeys and queries used only to verify Task 1 out of the installer. The initial database checks
+  required by Task 4 still belong in it. Before using behavior that Task 1 did not prove, verify that it works. In particular,
+  check that remote migrations can run without terminal input and that changing an existing participant is safe to repeat.
 - [ ] Invoke the bundled Node/Wrangler executable with argument arrays and `shell: false`.
   Supply secrets through supported stdin or private temporary input files, never command-line arguments.
 - [ ] Parse structured provider output where supported; test any unavoidable text parser against the pinned version.
