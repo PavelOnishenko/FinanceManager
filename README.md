@@ -40,8 +40,9 @@ Windows x64 computer through a remote support session. The family owns its Teleg
 Categories, display currency, finance timezone and history periods are already supported by the bot.
 
 Tasks 1 and 2 provide verified provider operations and a Windows ZIP with the Worker, migrations, Node and Wrangler.
-`Start setup.cmd` only checks package completeness. A complete manual installation from the ZIP still needs rehearsal.
-A browser wizard and automatic updater are not prerequisites; updates can use a separate assisted session.
+The developer checks the finished ZIP before distribution. Package contents still need aligning with the
+[build instructions](docs/deployment/FAMILY_RELEASE_BUILD.md), followed by a complete manual installation rehearsal.
+Installation and updates use an assisted session with commands from the package instructions.
 
 See the [pilot plan](docs/deployment/INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md),
 [next task](docs/deployment/INSTALLER_TASK_3.md), and [ZIP build instructions](docs/deployment/FAMILY_RELEASE_BUILD.md).
