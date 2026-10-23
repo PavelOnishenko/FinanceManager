@@ -45,6 +45,7 @@ The developer checks the finished ZIP before distribution. Package contents stil
 Installation and updates use an assisted session with commands from the package instructions.
 
 See the [pilot plan](docs/deployment/INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md),
+[installation instructions](docs/deployment/FAMILY_INSTALLATION.md),
 [next task](docs/deployment/INSTALLER_TASK_3.md), and [ZIP build instructions](docs/deployment/FAMILY_RELEASE_BUILD.md).
 The release commands below target the developer's existing instance; do not use them to deploy the friend's instance.
 

@@ -111,6 +111,6 @@ the fixed first statistics year remains 2026. Changing settings never rewrites
 expense rows or migration history.
 
 The operator performs setup, changes and readback using the manual procedure in
-[Task 3](../deployment/INSTALLER_TASK_3.md). The operator reads and updates settings through parameterized D1 queries.
+[installation instructions](../deployment/FAMILY_INSTALLATION.md). The operator reads and updates settings through parameterized D1 queries.
 Final acceptance still requires the separate-account rehearsal. The Worker implementation
 and local checks do not establish that the remote instance has been configured.
