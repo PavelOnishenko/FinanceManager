@@ -48,7 +48,7 @@ are rejected. This code is used as plain display text; no conversion is performe
 `finance_time_zone` is `UTC` or an IANA identifier with a region/path, such as
 `Europe/Belgrade` or `America/New_York`, accepted by the runtime's
 `Intl.DateTimeFormat`. Offset strings and abbreviations such as `CET` are rejected.
-Worker validation remains authoritative if the operator tools and Worker runtimes differ.
+After saving the settings to D1, request GET /health. Expect HTTP 200 with {"status":"ok","service":"family-finance-bot"}. If it returns HTTP 503, read the reported configuration error, correct the settings, and check again.
 Neither setting has a fallback.
 
 During setup, apply migrations and read the seeded settings row from D1. Show its
