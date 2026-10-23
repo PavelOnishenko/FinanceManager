@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
 import { cp, mkdir, mkdtemp, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,11 +27,8 @@ export async function buildFamilyRelease(toolchainPath: string, outputPath: stri
     for (const name of migrations)
       await cp(await resolvePackageFile(path.join(repository, "migrations"), name), path.join(stagingPackagesFolder, "migrations", name));
     await writeFile(path.join(stagingPackagesFolder, "wrangler.template.json"), JSON.stringify(configTemplate(), null, 2) + "\n");
-    for (const name of ["Start setup.cmd", "RELEASE_NOTES.ru.md"])
-      await cp(path.join(repository, "tools/family-installer/assets", name), path.join(stagingPackagesFolder, name));
-    const cmdFilePath = path.join(stagingPackagesFolder, "Start setup.cmd");
-    const cmdFileContents = await readFile(cmdFilePath, "utf8");
-    await writeFile(cmdFilePath, cmdFileContents.replace(/\r?\n/g, "\r\n"));
+    await cp(path.join(repository, "tools/family-installer/assets/RELEASE_NOTES.ru.md"), path.join(stagingPackagesFolder, "RELEASE_NOTES.ru.md"));
+    await cp(path.join(repository, "docs/deployment/FAMILY_INSTALLATION.md"), path.join(stagingPackagesFolder, "FAMILY_INSTALLATION.md"));
     // No source wrangler.jsonc, env files, plugins, or owner-side application compilation.
     const workerBuild = await build({
       absWorkingDir: repository,
@@ -63,26 +59,13 @@ export async function buildFamilyRelease(toolchainPath: string, outputPath: stri
       "\nCloudflare workers-sdk license texts (Wrangler, Miniflare and related packages):\n" +
       await readFile(path.join(repository, "tools/family-installer/assets/workers-sdk-LICENSE-MIT"), "utf8") + "\n" +
       await readFile(path.join(repository, "tools/family-installer/assets/workers-sdk-LICENSE-APACHE"), "utf8"));
-    await build({
-      absWorkingDir: repository,
-      entryPoints: ["tools/family-installer/main.ts"],
-      outfile: path.join(stagingPackagesFolder, "installer/installer.cjs"),
-      bundle: true,
-      format: "cjs",
-      platform: "node",
-      target: "node24",
-      define: { __FAMILY_FILES__: JSON.stringify(["installer/installer.cjs", ...await getDistributionFilesPaths(stagingPackagesFolder)]) },
-      legalComments: "linked"
-    });
     const configFilePath = await readFile(path.join(stagingPackagesFolder, "wrangler.template.json"), "utf8");
     assert.equal(JSON.parse(configFilePath).compatibility_date, COMPATIBILITY_DATE);
     await validatePackage(stagingPackagesFolder, FIXED_FILES);
     const files = await getDistributionFilesPaths(stagingPackagesFolder);
     const zipFilePath = path.join(stagingDirectory, `family-finance-${RELEASE_VERSION}-windows-x64.zip`);
     writeZip(stagingPackagesFolder, files, zipFilePath);
-    const digest = createHash("sha256").update(await readFile(zipFilePath)).digest("hex");
     // Atomic publication into a fresh directory; an existing release is never replaced.
-    await writeFile(path.join(stagingDirectory, "SHA256SUMS.txt"), `${digest}  ${path.basename(zipFilePath)}\n`);
     const final = path.join(output, `family-finance-${RELEASE_VERSION}-windows-x64`);
     await rename(stagingDirectory, final);
     console.log(`Release ${RELEASE_VERSION}: ${files.length} files; ${path.join(final, path.basename(zipFilePath))}`);

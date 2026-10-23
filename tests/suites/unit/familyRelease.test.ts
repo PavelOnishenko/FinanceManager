@@ -78,7 +78,7 @@ test("Windows dependency closure retains Wrangler's nested esbuild and omits Lin
 test("ZIP preserves spaces, Unicode and bytes with reproducible output", async context => {
   const root = await temporaryDirectory(context);
   await mkdir(path.join(root, "package"));
-  await writeFile(path.join(root, "package/Start setup.cmd"), "@echo off\r\n");
+  await writeFile(path.join(root, "package/Installation guide.md"), "# Installation\r\n");
   await writeFile(path.join(root, "package/заметки.txt"), "Комплект проверен\n");
   const files = await distributionFiles(path.join(root, "package"));
   writeZip(path.join(root, "package"), files, path.join(root, "release.zip"));
@@ -90,7 +90,7 @@ test("ZIP preserves spaces, Unicode and bytes with reproducible output", async c
     "-c",
     "import zipfile,sys; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; " +
       "assert z.read('заметки.txt').decode('utf-8') == 'Комплект проверен\\n'; " +
-      "assert z.read('Start setup.cmd') == b'@echo off\\r\\n'",
+      "assert z.read('Installation guide.md') == b'# Installation\\r\\n'",
     path.join(root, "release.zip")
   ], {
     encoding: "utf8",

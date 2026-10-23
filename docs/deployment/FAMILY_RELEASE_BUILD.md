@@ -4,9 +4,8 @@ The owner confirmed the initial packaging checks on two Windows machines (Task 2
 For the [assisted pilot](INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md), the developer checks the finished ZIP before distribution;
 the operator then installs the bot manually using its bundled tools and instructions.
 
-The layout below is the required pilot package. The current builder still includes additional files and does not yet
-include the operator instructions. Aligning the builder and its file list with this layout is pending in
-[Task 3](INSTALLER_TASK_3.md). The revised package and complete manual procedure still need verification.
+The builder includes the operator instructions and tools listed below. Building and extracting the revised ZIP
+can be checked on Linux; Windows runtime checks and the complete manual installation are confirmed separately.
 Building and checking the ZIP makes no Cloudflare or Telegram calls.
 
 ## Inputs and layout
@@ -19,7 +18,7 @@ versions against `package-lock.json`. Prepare dependencies using `npm ci`, which
 Use a fresh preparation directory; the builder does not download anything or repair dependencies.
 The output directory must be outside that toolchain directory to prevent recursive copying.
 
-Required paths inside the pilot ZIP (pending Task 3):
+Paths inside the pilot ZIP:
 
 ```text
 worker/worker.js
@@ -64,7 +63,7 @@ with the package before applying pending migrations.
 
 ## Build and acceptance checklist
 
-Follow the [packaging checklist](FAMILY_RELEASE_ACCEPTANCE.md) in Russian after aligning the builder with the pilot layout.
+Follow the [packaging checklist](FAMILY_RELEASE_ACCEPTANCE.md) in Russian.
 It contains the exact PowerShell commands and expected results for preparing a fresh toolchain,
 running packaging checks, building and inspecting the ZIP, and testing its bundled tools offline on clean Windows x64.
 Complete Part A on the developer computer, then Part B on the clean test computer or VM.

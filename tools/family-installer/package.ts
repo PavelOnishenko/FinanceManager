@@ -4,14 +4,13 @@ import path from "node:path";
 import { COMPATIBILITY_DATE, RELEASE_VERSION } from "./release";
 
 export const FIXED_FILES = [
-  "installer/installer.cjs",
+  "FAMILY_INSTALLATION.md",
   "worker/worker.js",
   "wrangler.template.json",
   "runtime/node.exe",
   "runtime/LICENSE",
   "wrangler/node_modules/wrangler/bin/wrangler.js",
   "wrangler/node_modules/wrangler/wrangler-dist/cli.js",
-  "Start setup.cmd",
   "RELEASE_NOTES.ru.md",
   "THIRD_PARTY_NOTICES.txt"
 ] as const;

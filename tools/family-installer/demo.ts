@@ -3,7 +3,7 @@ import { readdir } from "node:fs/promises";
 import { migrationSequence, validateAppliedMigrations } from "./package";
 import { RELEASE_VERSION } from "./release";
 
-// Packaging demo only. Provider simulation is introduced alongside adapters in Tasks 3–5.
+// Developer-side demonstration of migration history checks; no remote operations.
 const packaged = migrationSequence(await readdir(new URL("../../migrations/", import.meta.url)));
 validateAppliedMigrations(packaged, []);
 console.log(`Релиз ${RELEASE_VERSION}: новая установка — ${packaged.length} миграций в комплекте.`);
@@ -14,4 +14,3 @@ validateAppliedMigrations(packaged, packaged);
 console.log("Повторная проверка: миграции уже применены.");
 assert.throws(() => validateAppliedMigrations(packaged, ["9999_unknown.sql"]));
 console.log("Неизвестная история отклонена. Демо упаковки завершено без сетевых обращений.");
-console.log("Симуляция провайдеров, установки и обновления появится в задачах 3–5.");
