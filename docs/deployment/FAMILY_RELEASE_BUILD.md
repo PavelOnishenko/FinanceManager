@@ -1,9 +1,13 @@
-# Family release artifacts (installer Task 2)
+# Windows ZIP for the assisted pilot
 
-Status: Task 2 complete. The owner confirmed the packaging checks on two Windows machines.
-The ZIP supplies the tools for the [assisted pilot](INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md).
-The launcher checks package completeness; it does not install the bot. The complete manual procedure still needs rehearsal.
-No Cloudflare or Telegram calls are made by the builder, launcher, or packaging demo.
+The owner confirmed the initial packaging checks on two Windows machines (Task 2).
+For the [assisted pilot](INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md), the developer checks the finished ZIP before distribution;
+the operator then installs the bot manually using its bundled tools and instructions.
+
+The layout below is the required pilot package. The current builder still includes additional files and does not yet
+include the operator instructions. Aligning the builder and its file list with this layout is pending in
+[Task 3](INSTALLER_TASK_3.md). The revised package and complete manual procedure still need verification.
+Building and checking the ZIP makes no Cloudflare or Telegram calls.
 
 ## Inputs and layout
 
@@ -15,11 +19,9 @@ versions against `package-lock.json`. Prepare dependencies using `npm ci`, which
 Use a fresh preparation directory; the builder does not download anything or repair dependencies.
 The output directory must be outside that toolchain directory to prevent recursive copying.
 
-Fixed paths inside the ZIP:
+Required paths inside the pilot ZIP (pending Task 3):
 
 ```text
-Start setup.cmd
-installer/installer.cjs
 worker/worker.js
 wrangler.template.json
 migrations/0001_initial.sql ... 0005_instance_settings.sql
@@ -28,12 +30,13 @@ runtime/LICENSE
 wrangler/node_modules/...
 THIRD_PARTY_NOTICES.txt
 RELEASE_NOTES.ru.md
+FAMILY_INSTALLATION.md
 ```
 
 The template contains placeholders, `DB`, `migrations_dir`, `no_bundle: true`, and
 `APP_RELEASE_VERSION: "1"`. The operator copies the template to `wrangler.instance.json`, fills the account,
 database and Worker identifiers, and keeps it next to the packaged Worker/migrations in a separate working copy.
-Keep the original template unchanged: the package validator expects its placeholders. Never pass the unresolved template
+Keep the original template unchanged so it can be reused. Never pass the unresolved template
 to remote commands. Existing production/demo configurations remain unchanged. Read the installed release from
 `APP_RELEASE_VERSION` in the active Cloudflare version bindings; `/health` does not expose a release number.
 For an update, use the new package template with the existing resource identifiers, preserving the new release number.
@@ -51,20 +54,20 @@ Only allowlisted project files and the prepared public dependencies enter the ar
 configuration, credentials, instance state and logs are not copy sources. Dependency package contents
 are copied without filename filtering; nested `node_modules` directories are handled separately
 through the lock rather than copied wholesale.
-The complete packaged file allowlist is embedded in the compiled installer, which checks that each
-listed path exists and is a regular file. This is a completeness check, not a signature or
-tamper-proof verification. Only use trusted release archives.
+The developer checks the allowed file list, configuration template and migration sequence during preparation,
+then extracts the finished ZIP and checks its contents and bundled tools. These checks belong on the developer computer.
+The recipient checks the transferred ZIP against its trusted SHA-256 checksum before extraction.
 
 Migration names must be consecutive four-digit numeric prefixes starting at 0001, with no duplicates.
 Applied history must match an exact prefix of the package sequence; otherwise stop before mutation.
 The package helpers validate these rules locally. During the assisted pilot, the operator compares the remote history
-with the package before applying pending migrations; no automatic remote validation exists yet.
+with the package before applying pending migrations.
 
 ## Build and acceptance checklist
 
-Follow the [step-by-step Task 2 acceptance checklist](FAMILY_RELEASE_ACCEPTANCE.md) in Russian.
+Follow the [packaging checklist](FAMILY_RELEASE_ACCEPTANCE.md) in Russian after aligning the builder with the pilot layout.
 It contains the exact PowerShell commands and expected results for preparing a fresh toolchain,
-running installer checks, building and inspecting the ZIP, and testing it offline on clean Windows x64.
+running packaging checks, building and inspecting the ZIP, and testing its bundled tools offline on clean Windows x64.
 Complete Part A on the developer computer, then Part B on the clean test computer or VM.
 
 The builder accepts a prepared toolchain path and an output directory:
@@ -77,4 +80,4 @@ Each successful build publishes `family-finance-1-windows-x64/` containing the Z
 and the unpacked `package/` directory. An existing release directory is not overwritten.
 The ZIP uses fixed timestamps and sorted paths and needs no external archiver to build.
 Failed builds remove their staging directory. Checksums are adjacent distribution files,
-not an extra installer version manifest.
+kept outside the ZIP.
