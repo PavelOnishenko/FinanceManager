@@ -35,7 +35,7 @@ the current work is described in [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md).
 
 ## Assisted pilot for one family
 
-The next goal is installation for one friend within 3–5 working days, with the developer operating the friend's
+The next goal is installation for one friend, with the developer operating the friend's
 Windows x64 computer through a remote support session. The family owns its Telegram bot, Cloudflare Worker and D1.
 Categories, display currency, finance timezone and history periods are already supported by the bot.
 
