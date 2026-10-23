@@ -62,8 +62,9 @@
   A small review fix, a test-file edit, a commit, a push, or a reply to the user is not a reason to repeat the full suite.
   While the PR remains under review, use targeted tests for follow-up fixes rather than treating each fix as final task verification.
 - For documentation-only changes, do not run application tests; review the diff and run appropriate document checks instead.
-- Preserve completed acceptance checklists as historical records, including their checked items and the procedure that was accepted.
-  Put checks for a changed package in the current task or build instructions; do not rewrite a completed acceptance record
+- Preserve reports of completed tasks and completed acceptance checklists as historical records, including their results,
+  checked items and the procedure that was accepted.
+  Put checks for a changed package in the current task or build instructions; do not rewrite a completed task report or acceptance record
   or require it to be repeated unless the user explicitly asks to revise that record.
 - Keep the suite easy to read, small, and useful for this project's actual risks. Prioritize protection against lost or incorrect financial data,
   duplicate writes, and unauthorized access. Match testing effort to failure consequences and maintenance cost; avoid numerical test or coverage quotas.
