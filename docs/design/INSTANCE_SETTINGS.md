@@ -1,4 +1,4 @@
-# Instance settings: Worker and installer contract
+# Instance settings: Worker and assisted setup contract
 
 Migration `0005_instance_settings.sql` creates `instance_settings` and inserts one
 row with `id = 1`, `display_currency = 'RSD'`, and
@@ -48,7 +48,7 @@ are rejected. This code is used as plain display text; no conversion is performe
 `finance_time_zone` is `UTC` or an IANA identifier with a region/path, such as
 `Europe/Belgrade` or `America/New_York`, accepted by the runtime's
 `Intl.DateTimeFormat`. Offset strings and abbreviations such as `CET` are rejected.
-Runtime validation remains authoritative if installer and Worker runtimes differ.
+Worker validation remains authoritative if the operator tools and Worker runtimes differ.
 Neither setting has a fallback.
 
 During setup, apply migrations and read the seeded settings row from D1. Show its
@@ -64,8 +64,8 @@ repeat the seed or use `INSERT OR REPLACE` to restore the initial values.
 
 ## Changing settings later
 
-The installer must read the current settings from the customer's D1 database
-before showing a change. D1 is authoritative; local files and Worker configuration
+During assisted maintenance, the operator reads the current settings from the family's D1 database
+before proposing a change. D1 is authoritative; local files and Worker configuration
 must not keep a separate authoritative copy. Show current and proposed values and
 require confirmation with these explanations in Russian:
 
@@ -102,7 +102,7 @@ further calls reuse the same promise and settings snapshot. No value is cached
 across requests, and no global mutable state is used. A committed change applies
 to the next request that needs settings, without redeployment.
 
-## Compatibility and remaining installer work
+## Compatibility and pilot acceptance
 
 `expenses.amount_rsd`, existing integer amounts, source action keys, explicit
 expense dates, and UTC timestamps remain unchanged. New expenses use the actual
@@ -110,7 +110,7 @@ creation action's time in the selected zone. Relative statistics use that zone;
 the fixed first statistics year remains 2026. Changing settings never rewrites
 expense rows or migration history.
 
-Installer Tasks 4 and 6 must implement the setup/change UI and timeout
-reconciliation described above. Final acceptance still requires the separate
-account rehearsal. The Worker implementation and local checks do not establish
-that the installer or remote instances have been configured.
+The operator performs setup, changes and readback using the manual procedure in
+[Task 3](../deployment/INSTALLER_TASK_3.md). A settings UI is not required for the pilot.
+Final acceptance still requires the separate-account rehearsal. The Worker implementation
+and local checks do not establish that the remote instance has been configured.

@@ -1,8 +1,9 @@
 # Family release artifacts (installer Task 2)
 
-Status: Task 2 complete. The owner confirmed all Part A/B acceptance checks passed on two machines on October 21, 2026.
-This is a preliminary release, not an operational installer. Tasks 3–6 supply provider adapters, installation, updates,
-and the browser UI. No Cloudflare or Telegram calls are made by the builder, launcher, or packaging demo.
+Status: Task 2 complete. The owner confirmed the packaging checks on two Windows machines.
+The ZIP supplies the tools for the [assisted pilot](INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md).
+The launcher checks package completeness; it does not install the bot. The complete manual procedure still needs rehearsal.
+No Cloudflare or Telegram calls are made by the builder, launcher, or packaging demo.
 
 ## Inputs and layout
 
@@ -30,10 +31,12 @@ RELEASE_NOTES.ru.md
 ```
 
 The template contains placeholders, `DB`, `migrations_dir`, `no_bundle: true`, and
-`APP_RELEASE_VERSION: "1"`. Future setup must fill it using `instanceConfig` and place it next to
-the packaged Worker/migrations in a separate instance workspace. Never pass the unresolved template
-to remote commands. Existing production/demo configurations remain unchanged. Worker version
-readback through health is still Task 5 work, as specified in the plan.
+`APP_RELEASE_VERSION: "1"`. The operator copies the template to `wrangler.instance.json`, fills the account,
+database and Worker identifiers, and keeps it next to the packaged Worker/migrations in a separate working copy.
+Keep the original template unchanged: the package validator expects its placeholders. Never pass the unresolved template
+to remote commands. Existing production/demo configurations remain unchanged. Read the installed release from
+`APP_RELEASE_VERSION` in the active Cloudflare version bindings; `/health` does not expose a release number.
+For an update, use the new package template with the existing resource identifiers, preserving the new release number.
 
 The builder bundles the Worker once with esbuild's browser conditions. The owner needs neither
 source nor a compiler. Wrangler's complete Windows runtime dependency closure is copied at its
@@ -54,7 +57,8 @@ tamper-proof verification. Only use trusted release archives.
 
 Migration names must be consecutive four-digit numeric prefixes starting at 0001, with no duplicates.
 Applied history must match an exact prefix of the package sequence; otherwise stop before mutation.
-The provider adapter will call this check with real readback in later tasks.
+The package helpers validate these rules locally. During the assisted pilot, the operator compares the remote history
+with the package before applying pending migrations; no automatic remote validation exists yet.
 
 ## Build and acceptance checklist
 

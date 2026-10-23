@@ -31,10 +31,21 @@ Tests live in `tests/suites/`, grouped into `unit`, `integration`, and `worker` 
 Reusable helpers live in `tests/infrastructure/`, with Telegram and Worker helpers in their own subdirectories.
 `npm test` recursively discovers all `*.test.ts` files under `tests/suites/`.
 Documentation is grouped into `docs/design/`, `docs/testing/`, and `docs/deployment/`;
-the implementation history remains in [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md).
+the current work is described in [docs/NEXT_STEPS.md](docs/NEXT_STEPS.md).
 
-The proposed plan for editable categories, currency display, configurable timezone, and independent family deployment
-is in [docs/deployment/INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md](docs/deployment/INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md).
+## Assisted pilot for one family
+
+The next goal is installation for one friend within 3–5 working days, with the developer operating the friend's
+Windows x64 computer through a remote support session. The family owns its Telegram bot, Cloudflare Worker and D1.
+Categories, display currency, finance timezone and history periods are already supported by the bot.
+
+Tasks 1 and 2 provide verified provider operations and a Windows ZIP with the Worker, migrations, Node and Wrangler.
+`Start setup.cmd` only checks package completeness. A complete manual installation from the ZIP still needs rehearsal.
+A browser wizard and automatic updater are not prerequisites; updates can use a separate assisted session.
+
+See the [pilot plan](docs/deployment/INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md),
+[next task](docs/deployment/INSTALLER_TASK_3.md), and [ZIP build instructions](docs/deployment/FAMILY_RELEASE_BUILD.md).
+The release commands below target the developer's existing instance; do not use them to deploy the friend's instance.
 
 ## HOW TO RELEASE:
 npm.cmd test
