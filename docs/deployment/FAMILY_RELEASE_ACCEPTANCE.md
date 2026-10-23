@@ -1,7 +1,8 @@
 # Приёмка упаковки семейного релиза — Task 2
 
-Упаковка Task 2 принята владельцем на двух соответствующих машинах. Ниже — чек-лист повторной проверки пакета;
-он не подтверждает полную установку из ZIP. Для пилота следуйте [плану ручной установки](INSTALLER_TASK_3.md).
+**Принято:** 21 октября 2026 года владелец подтвердил успешное выполнение всех пунктов А и Б на двух соответствующих машинах.
+Галочки ниже фиксируют выполненную приёмку упаковки Task 2. Полная установка из ZIP проверяется отдельно
+по [плану ручной установки](INSTALLER_TASK_3.md).
 
 Проверяем текущий релиз **1**: Node **24.13.0**, Wrangler **4.133.0**, compatibility date **2026-09-16**.
 Если значения в `tools/family-installer/release.ts` уже другие, сначала обновите версии, пути и контрольные суммы в этой инструкции.
@@ -19,7 +20,7 @@
 
 ### А1. Открыть проект и проверить инструменты
 
-- [ ] Откройте PowerShell в корне репозитория `FinanceManager`, где находятся `package.json` и `wrangler.jsonc`.
+- [x] Откройте PowerShell в корне репозитория `FinanceManager`, где находятся `package.json` и `wrangler.jsonc`.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -45,7 +46,7 @@ Node 24.x (проверенная Windows-версия — 24.13.0), верси�
 
 ### А2. Создать свежую рабочую папку и установить зависимости проекта
 
-- [ ] Выполните:
+- [x] Выполните:
 
 ```powershell
 $run = Join-Path $repo ('work\acceptance-' + [guid]::NewGuid().ToString('N'))
@@ -62,7 +63,7 @@ Write-Host "Рабочая папка: $run"
 
 ### А3. Подготовить Windows toolchain из текущего lock-файла
 
-- [ ] Установите зависимости в отдельную папку:
+- [x] Установите зависимости в отдельную папку:
 
 ```powershell
 Copy-Item 'package.json', 'package-lock.json' $toolchain
@@ -70,7 +71,7 @@ npm.cmd ci --prefix $toolchain --os=win32 --cpu=x64 --ignore-scripts --no-audit 
 if ($LASTEXITCODE -ne 0) { throw 'Не подготовлены Windows-зависимости' }
 ```
 
-- [ ] Скачайте и проверьте официальный Node, затем извлеките два нужных файла:
+- [x] Скачайте и проверьте официальный Node, затем извлеките два нужных файла:
 
 ```powershell
 $nodeZip = Join-Path $run 'node-v24.13.0-win-x64.zip'
@@ -93,7 +94,7 @@ if ($nodeExeHash -ne 'd14ba95cdce1ef7dc9ad3ac74949ca5db38b27378ee30f30a23cf26f9e
 
 ### А4. Проверить только установщик
 
-- [ ] Выполните три команды:
+- [x] Выполните три команды:
 
 ```powershell
 npm.cmd run installer:check
@@ -111,7 +112,7 @@ Python используется тестом для независимого ч�
 
 ### А5. Собрать релиз и проверить контрольную сумму ZIP
 
-- [ ] Выполните:
+- [x] Выполните:
 
 ```powershell
 npm.cmd run release:family -- $toolchain $output
@@ -135,7 +136,7 @@ Write-Host "SHA256: $actualZipHash"
 
 ### А6. Проверить именно архив, а не только папку до упаковки
 
-- [ ] Проверьте распаковку и CRC всех файлов, затем распакуйте ZIP:
+- [x] Проверьте распаковку и CRC всех файлов, затем распакуйте ZIP:
 
 ```powershell
 python -c "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; print('ZIP CRC OK')" $zip
@@ -146,7 +147,7 @@ Expand-Archive -LiteralPath $zip -DestinationPath $unpacked
 
 **Ожидается:** `ZIP CRC OK` и успешная распаковка.
 
-- [ ] Проверьте верхний уровень архива и состав миграций:
+- [x] Проверьте верхний уровень архива и состав миграций:
 
 ```powershell
 $expectedRoot = @('installer', 'worker', 'migrations', 'runtime', 'wrangler', 'Start setup.cmd',
@@ -167,7 +168,7 @@ foreach ($name in $sourceMigrations) {
 В корне пакета нет `.git`, `.env`, `.wrangler`, исходного `wrangler.jsonc`, исходников проекта или файлов состояния семьи.
 Содержимое опубликованных npm-пакетов внутри `wrangler/` не фильтруется по именам файлов.
 
-- [ ] Откройте `$unpacked\wrangler.template.json` в редакторе и сверьте все значения:
+- [x] Откройте `$unpacked\wrangler.template.json` в редакторе и сверьте все значения:
 
 ```powershell
 notepad.exe (Join-Path $unpacked 'wrangler.template.json')
@@ -191,7 +192,7 @@ notepad.exe (Join-Path $unpacked 'wrangler.template.json')
 **Ожидается:** шаблон с заглушками, без настоящих account/database IDs и без Telegram-токена или webhook secret.
 Не заменяйте заглушки и не выполняйте команды deploy/login: для Task 2 они не нужны.
 
-- [ ] Откройте `runtime\LICENSE`, `THIRD_PARTY_NOTICES.txt` и `RELEASE_NOTES.ru.md` внутри распакованного пакета.
+- [x] Откройте `runtime\LICENSE`, `THIRD_PARTY_NOTICES.txt` и `RELEASE_NOTES.ru.md` внутри распакованного пакета.
 
 ```powershell
 notepad.exe (Join-Path $unpacked 'runtime\LICENSE')
@@ -207,9 +208,9 @@ notepad.exe (Join-Path $unpacked 'RELEASE_NOTES.ru.md')
 
 ### Б1. Подготовить отдельную среду и перенести архив
 
-- [ ] Используйте чистую Windows x64 VM или компьютер без установленных Node/npm/Git и без Cloudflare/Telegram-учётных данных разработчика.
+- [x] Используйте чистую Windows x64 VM или компьютер без установленных Node/npm/Git и без Cloudflare/Telegram-учётных данных разработчика.
   Новый пользователь на компьютере с глобально установленным Node сам по себе не доказывает автономность пакета.
-- [ ] Откройте PowerShell и выполните:
+- [x] Откройте PowerShell и выполните:
 
 ```powershell
 $ErrorActionPreference = 'Stop'
@@ -225,13 +226,13 @@ explorer.exe $checkRoot
 **Ожидается:** Windows 64-bit и `Architecture` процессора **9** (x64); `Get-Command` не находит Node/npm/Git.
 Если команды найдены или архитектура другая, выберите подходящую чистую среду.
 
-- [ ] Скопируйте в открывшуюся папку **только** `family-finance-1-windows-x64.zip` и `SHA256SUMS.txt` из А5.
+- [x] Скопируйте в открывшуюся папку **только** `family-finance-1-windows-x64.zip` и `SHA256SUMS.txt` из А5.
   Не переносите checkout, toolchain, корневой `node_modules`, конфигурацию или креденшелы разработчика.
-- [ ] Отключите сеть в этой среде. Все дальнейшие шаги Б выполняются офлайн, в том же окне PowerShell.
+- [x] Отключите сеть в этой среде. Все дальнейшие шаги Б выполняются офлайн, в том же окне PowerShell.
 
 ### Б2. Проверить перенесённый ZIP и запустить launcher
 
-- [ ] Выполните:
+- [x] Выполните:
 
 ```powershell
 $zip = Join-Path $checkRoot 'family-finance-1-windows-x64.zip'
@@ -242,7 +243,7 @@ Expand-Archive -LiteralPath $zip -DestinationPath $packageRoot
 explorer.exe $packageRoot
 ```
 
-- [ ] В открывшейся папке дважды нажмите `Start setup.cmd`.
+- [x] В открывшейся папке дважды нажмите `Start setup.cmd`.
 
 **Ожидаются три строки:**
 
@@ -258,7 +259,7 @@ explorer.exe $packageRoot
 
 ### Б3. Проверить bundled runtime и native-зависимости
 
-- [ ] Выполните из прежнего окна PowerShell:
+- [x] Выполните из прежнего окна PowerShell:
 
 ```powershell
 $env:WRANGLER_SEND_METRICS = 'false'
@@ -282,7 +283,7 @@ esbuild `0.28.1`. Не должно быть предложений устано
 
 ### Б4. Перенести папку и проверить независимость от рабочего каталога
 
-- [ ] Выполните; при паузе launcher нажмите любую клавишу:
+- [x] Выполните; при паузе launcher нажмите любую клавишу:
 
 ```powershell
 $moved = Join-Path $checkRoot 'Перенесённый пакет'
@@ -297,7 +298,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Launcher не работает после пе
 
 ### Б5. Проверить отсутствие обязательных файлов и восстановление
 
-- [ ] Выполните блок. Он временно переименует сначала миграцию, затем native-файл Wrangler.
+- [x] Выполните блок. Он временно переименует сначала миграцию, затем native-файл Wrangler.
   При каждой из двух пауз нажмите клавишу. Файлы восстанавливаются в `finally`.
 
 ```powershell
@@ -321,7 +322,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Пакет не восстановился п�
 
 ## Критерий завершения
 
-- [ ] Все пункты А и Б выполнены с указанными результатами для проверяемой сборки.
+- [x] Все пункты А и Б выполнены с указанными результатами; подтверждено владельцем.
 Сохраняйте проверенные ZIP и SHA256SUMS.txt. При повторной проверке сообщите commit, SHA256 ZIP,
 версию Windows и «А1–Б5 пройдены» либо номер первого неуспешного шага с ошибкой. Секреты и данные семьи не присылайте.
 
