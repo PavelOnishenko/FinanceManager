@@ -61,12 +61,15 @@ Applied history must match an exact prefix of the package sequence; otherwise st
 The package helpers validate these rules locally. During the assisted pilot, the operator compares the remote history
 with the package before applying pending migrations.
 
-## Build and acceptance checklist
+## Build and verification
 
-Follow the [packaging checklist](FAMILY_RELEASE_ACCEPTANCE.md) in Russian.
-It contains the exact PowerShell commands and expected results for preparing a fresh toolchain,
-running packaging checks, building and inspecting the ZIP, and testing its bundled tools offline on clean Windows x64.
-Complete Part A on the developer computer, then Part B on the clean test computer or VM.
+The [completed Task 2 acceptance](FAMILY_RELEASE_ACCEPTANCE.md) records the original package and its Windows checks.
+It is a historical record, not a checklist for the current pilot ZIP.
+For the current package, run `npm.cmd run installer:check` and `npm.cmd run installer:test`, build the ZIP,
+extract it and compare its layout with the paths above. Confirm that the instructions, migrations,
+configuration template, licenses and bundled tools are present.
+Windows execution and the full installation are checked in
+[Task 4](INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md#task-4-отрепетировать-полный-проход).
 
 The builder accepts a prepared toolchain path and an output directory:
 

@@ -31,8 +31,9 @@ Redeploy сохранил секреты, настройки и историю �
 | esbuild Wrangler | 0.28.1, входит в ZIP как отдельная зависимость |
 | workerd | 1.20260916.1, Windows native-файл входит в ZIP |
 
-Не копировать Linux `node_modules` в Windows-пакет. Подготовка Windows toolchain описана в
-[инструкции сборки](FAMILY_RELEASE_BUILD.md) и [чек-листе упаковки](FAMILY_RELEASE_ACCEPTANCE.md).
+Не копировать Linux `node_modules` в Windows-пакет. Текущий состав и проверка пакета описаны в
+[инструкции сборки](FAMILY_RELEASE_BUILD.md). [Приёмка Task 2](FAMILY_RELEASE_ACCEPTANCE.md) фиксирует
+ранее выполненную проверку первоначального пакета; её результаты сохраняются без повторного прохождения.
 На компьютере друга не нужны npm, Git, TypeScript или исходники проекта.
 
 ## Локальная проба
