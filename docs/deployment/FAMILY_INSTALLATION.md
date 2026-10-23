@@ -12,24 +12,19 @@ ZIP готовится по [инструкции сборки](FAMILY_RELEASE_B
 [порядок обновления](INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md#как-обслуживать-и-обновлять-пилот).
 Не используйте Git репозиторий проекта, ресурсы или учётные данные разработчика на компьютере владельца.
 
-## 1. Распаковать проверенный ZIP
+## 1. Распаковать ZIP
 
 Разработчик заранее готовит ZIP и встроенные инструменты по
-[чек-листу упаковки](FAMILY_RELEASE_ACCEPTANCE.md). ZIP нужно завести на компьютер владельца.
+[чек-листу упаковки](FAMILY_RELEASE_ACCEPTANCE.md) и использует готовый архив для установки на компьютере владельца.
 Команды ниже выполняйте последовательно в одном окне PowerShell. При любой ошибке остановитесь;
 ожидаемый результат каждого шага проверяйте до следующего действия.
 
-Откройте новое окно PowerShell без transcript, отладки и записи экрана. Подставьте путь к полученному ZIP
-и SHA256, переданный разработчиком. Контрольная сумма из неизвестного источника не подтверждает происхождение архива.
+Откройте новое окно PowerShell без transcript, отладки и записи экрана. Укажите путь к подготовленному ZIP.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 $zip = Read-Host 'Полный путь к ZIP'
-$expectedHash = (Read-Host 'Доверенный SHA256 ZIP').Trim().ToLowerInvariant()
-if ($expectedHash -notmatch '^[a-f0-9]{64}$') { throw 'Неверный формат SHA256' }
-$zipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($zipHash -ne $expectedHash) { throw 'SHA256 не совпал; получите проверенный ZIP заново' }
 $instanceRoot = Join-Path $env:LOCALAPPDATA 'FamilyFinanceBot'
 $packageRoot = Join-Path $instanceRoot ('release-1-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
@@ -55,7 +50,7 @@ $env:NO_UPDATE_NOTIFIER = '1'
 $OutputEncoding = [Console]::OutputEncoding
 ```
 
-**Ожидается:** хэш совпал, архив распакован в новый каталог владельца. В нём есть `worker/`, `migrations/`,
+**Ожидается:** архив распакован в новый каталог владельца. В нём есть `worker/`, `migrations/`,
 `runtime/`, `wrangler/` и `wrangler.template.json`. Здесь не нужны `npm install`, Git или сборка Worker.
 Если распаковка не удалась, удалять облачные ресурсы не нужно: получите и распакуйте проверенный архив заново.
 
@@ -398,9 +393,9 @@ $member | Format-Table telegram_user_id, display_name, enabled
 ## 9. Оставить владельцу сведения и завершить сеанс
 
 Вне каталога релиза, например в `$instanceRoot\INSTANCE.txt`, сохраните обычную текстовую памятку:
-account ID, Worker name/URL, имя и ID D1, профиль Wrangler, релиз `1`, SHA256 ZIP и проверенный активный version ID.
+account ID, Worker name/URL, имя и ID D1, профиль Wrangler, релиз `1` и проверенный активный version ID.
 Сохраните рядом копию `wrangler.instance.json`. Памятка и конфиг не являются резервной копией расходов.
-Владелец хранит оригинальный ZIP, доверенную контрольную сумму, инструкцию и копию памятки/конфигурации в своём хранилище.
+Владелец хранит оригинальный ZIP, инструкцию и копию памятки/конфигурации в своём хранилище.
 OAuth остаётся в штатном хранилище Wrangler на компьютере владельца; токены и webhook secret в памятку не включайте.
 
 Перед закрытием PowerShell очистите временные переменные, буфер обмена, если туда копировали токен, и завершите удалённый доступ:

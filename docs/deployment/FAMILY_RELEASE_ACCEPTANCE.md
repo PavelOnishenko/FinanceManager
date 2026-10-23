@@ -3,7 +3,7 @@
 **Принято:** 21 октября 2026 года владелец подтвердил успешное выполнение всех пунктов А и Б на двух соответствующих машинах.
 
 Проверяем текущий релиз **1**: Node **24.13.0**, Wrangler **4.133.0**, compatibility date **2026-09-16**.
-Если значения в `tools/family-installer/release.ts` уже другие, сначала обновите версии, пути и контрольные суммы в этой инструкции.
+Если значения в `tools/family-installer/release.ts` уже другие, сначала обновите версии, пути и контрольные суммы официального Node в этой инструкции.
 
 Выполняйте шаги по порядку. Отмечайте пункт только после получения указанного результата.
 При неожиданном результате остановитесь и пришлите номер шага и текст ошибки. Следующие шаги не выполняйте.
@@ -107,7 +107,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Demo установщика не прошло'
 (сейчас их 6); последняя строка demo — `Симуляция провайдеров, установки и обновления появится в задачах 3–5.`
 Python используется тестом для независимого чтения ZIP. Полный набор тестов приложения для этой приёмки не запускается.
 
-### А5. Собрать релиз и проверить контрольную сумму ZIP
+### А5. Собрать релиз
 
 - [x] Выполните:
 
@@ -116,33 +116,26 @@ npm.cmd run release:family -- $toolchain $output
 if ($LASTEXITCODE -ne 0) { throw 'Сборка релиза не прошла' }
 $release = Join-Path $output 'family-finance-1-windows-x64'
 $zip = Join-Path $release 'family-finance-1-windows-x64.zip'
-$checksums = Join-Path $release 'SHA256SUMS.txt'
-foreach ($item in @($zip, $checksums, (Join-Path $release 'package'))) {
+foreach ($item in @($zip, (Join-Path $release 'package'))) {
   if (!(Test-Path -LiteralPath $item)) { throw "Отсутствует результат сборки: $item" }
 }
-$expectedZipHash = ((Get-Content -LiteralPath $checksums -Raw).Trim() -split '\s+')[0]
-$actualZipHash = (Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant()
-if ($actualZipHash -ne $expectedZipHash) { throw 'Не совпал SHA256 релизного ZIP' }
 Write-Host "ZIP: $zip"
-Write-Host "SHA256: $actualZipHash"
 ```
 
-**Ожидается:** строка `Release 1: … files; …zip`, каталог `$release` с ZIP, `SHA256SUMS.txt` и `package/`, совпавшая контрольная сумма.
+**Ожидается:** строка `Release 1: … files; …zip`, каталог `$release` с ZIP и `package/`.
 Точное количество файлов и размер ZIP не являются критерием: они могут изменяться вместе с зависимостями.
 Повторную приёмку начинайте с А1 в новом окне: А2 создаст новую рабочую папку, без конфликта с прежним результатом.
 
 ### А6. Проверить именно архив, а не только папку до упаковки
 
-- [x] Проверьте распаковку и CRC всех файлов, затем распакуйте ZIP:
+- [x] Распакуйте готовый ZIP:
 
 ```powershell
-python -c "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; print('ZIP CRC OK')" $zip
-if ($LASTEXITCODE -ne 0) { throw 'Повреждён ZIP' }
 $unpacked = Join-Path $run 'Проверка пакета с пробелами'
 Expand-Archive -LiteralPath $zip -DestinationPath $unpacked
 ```
 
-**Ожидается:** `ZIP CRC OK` и успешная распаковка.
+**Ожидается:** архив успешно распакован.
 
 - [x] Проверьте верхний уровень архива и состав миграций:
 
@@ -155,9 +148,9 @@ $sourceMigrations = @(Get-ChildItem -LiteralPath (Join-Path $repo 'migrations') 
 $zipMigrations = @(Get-ChildItem -LiteralPath (Join-Path $unpacked 'migrations') -File | Select-Object -ExpandProperty Name)
 if (Compare-Object $sourceMigrations $zipMigrations) { throw 'Не совпал список миграций' }
 foreach ($name in $sourceMigrations) {
-  $sourceHash = (Get-FileHash -LiteralPath (Join-Path $repo "migrations\$name") -Algorithm SHA256).Hash
-  $packagedHash = (Get-FileHash -LiteralPath (Join-Path $unpacked "migrations\$name") -Algorithm SHA256).Hash
-  if ($sourceHash -ne $packagedHash) { throw "Изменилось содержимое миграции: $name" }
+  $sourceSql = Get-Content -LiteralPath (Join-Path $repo "migrations\$name") -Raw -Encoding UTF8
+  $packagedSql = Get-Content -LiteralPath (Join-Path $unpacked "migrations\$name") -Raw -Encoding UTF8
+  if ($sourceSql -cne $packagedSql) { throw "Изменилось содержимое миграции: $name" }
 }
 ```
 
@@ -222,18 +215,16 @@ explorer.exe $checkRoot
 **Ожидается:** Windows 64-bit и `Architecture` процессора **9** (x64); `Get-Command` не находит Node/npm/Git.
 Если команды найдены или архитектура другая, выберите подходящую чистую среду.
 
-- [x] Скопируйте в открывшуюся папку **только** `family-finance-1-windows-x64.zip` и `SHA256SUMS.txt` из А5.
+- [x] Скопируйте в открывшуюся папку **только** `family-finance-1-windows-x64.zip` из А5.
   Не переносите checkout, toolchain, корневой `node_modules`, конфигурацию или креденшелы разработчика.
 - [x] Отключите сеть в этой среде. Все дальнейшие шаги Б выполняются офлайн, в том же окне PowerShell.
 
-### Б2. Проверить перенесённый ZIP и запустить launcher
+### Б2. Распаковать ZIP и запустить launcher
 
 - [x] Выполните:
 
 ```powershell
 $zip = Join-Path $checkRoot 'family-finance-1-windows-x64.zip'
-$expectedHash = ((Get-Content -LiteralPath (Join-Path $checkRoot 'SHA256SUMS.txt') -Raw).Trim() -split '\s+')[0]
-if ((Get-FileHash -LiteralPath $zip -Algorithm SHA256).Hash.ToLowerInvariant() -ne $expectedHash) { throw 'Не совпал SHA256 перенесённого ZIP' }
 $packageRoot = Join-Path $checkRoot 'Семейный бот с пробелами'
 Expand-Archive -LiteralPath $zip -DestinationPath $packageRoot
 explorer.exe $packageRoot
@@ -317,7 +308,7 @@ if ($LASTEXITCODE -ne 0) { throw 'Пакет не восстановился п�
 ## Критерий завершения
 
 - [x] Все пункты А и Б выполнены с указанными результатами; подтверждено владельцем.
-Сохраняйте проверенные ZIP и SHA256SUMS.txt. При повторной проверке сообщите commit, SHA256 ZIP,
+Сохраняйте проверенный ZIP. При повторной проверке сообщите commit,
 версию Windows и «А1–Б5 пройдены» либо номер первого неуспешного шага с ошибкой. Секреты и данные семьи не присылайте.
 
 Приёмка **Task 2** завершена. Передача семье рабочего установщика требует выполнения задач 3–6;

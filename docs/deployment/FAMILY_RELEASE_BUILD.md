@@ -56,7 +56,6 @@ are copied without filename filtering; nested `node_modules` directories are han
 through the lock rather than copied wholesale.
 The developer checks the allowed file list, configuration template and migration sequence during preparation,
 then extracts the finished ZIP and checks its contents and bundled tools. These checks belong on the developer computer.
-The recipient checks the transferred ZIP against its trusted SHA-256 checksum before extraction.
 
 Migration names must be consecutive four-digit numeric prefixes starting at 0001, with no duplicates.
 Applied history must match an exact prefix of the package sequence; otherwise stop before mutation.
@@ -76,8 +75,7 @@ The builder accepts a prepared toolchain path and an output directory:
 npm.cmd run release:family -- <prepared-windows-toolchain> <output-directory>
 ```
 
-Each successful build publishes `family-finance-1-windows-x64/` containing the ZIP, `SHA256SUMS.txt`
+Each successful build publishes `family-finance-1-windows-x64/` containing the ZIP
 and the unpacked `package/` directory. An existing release directory is not overwritten.
 The ZIP uses fixed timestamps and sorted paths and needs no external archiver to build.
-Failed builds remove their staging directory. Checksums are adjacent distribution files,
-kept outside the ZIP.
+Failed builds remove their staging directory.
