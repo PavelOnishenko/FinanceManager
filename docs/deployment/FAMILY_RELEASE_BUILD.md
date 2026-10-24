@@ -5,7 +5,8 @@ For the [assisted pilot](INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md), the developer c
 the operator then installs the bot manually using its bundled tools and instructions.
 
 The builder includes the operator instructions and tools listed below. Building and extracting the revised ZIP
-can be checked on Linux; Windows runtime checks and the complete manual installation are confirmed separately.
+can be checked on Linux. On 24 October 2026, the owner confirmed the Windows runtime checks and complete manual installation
+as part of [Task 4](INDEPENDENT_FAMILY_DEPLOYMENT_PLAN.md#task-4-отрепетировать-полный-проход).
 Building and checking the ZIP makes no Cloudflare or Telegram calls.
 
 ## Inputs and layout
