@@ -16,29 +16,133 @@
 Папка распаковки каждый раз новая и случайная; постоянные именованные папки семей не нужны.
 
 Если команды выполняет помощник, перед сетевыми обращениями он объясняет, какие ресурсы читает или меняет,
-и получает явное разрешение разработчика по AGENTS.md. При самостоятельном выполнении вы сами подтверждаете выбранную цель. Разрешение на Git или локальную сборку не разрешает Cloudflare и Telegram.
+и получает явное разрешение разработчика по AGENTS.md. При самостоятельном выполнении вы сами подтверждаете выбранную цель.
+Разрешение на Git или локальную сборку не разрешает Cloudflare и Telegram.
 Можно согласовать конкретную группу команд следующего шага; при смене цели согласование повторяют.
 Существующие Worker, D1, участники и webhook других установок не меняются.
 
-## 1. Распаковать ZIP
+## 0. Подготовить инструменты и собрать ZIP
 
-Заранее соберите универсальный ZIP со встроенными инструментами существующей командой `release:family`.
-Для установки используйте этот ZIP на своём компьютере.
-Команды ниже выполняйте последовательно в одном окне PowerShell. При любой ошибке остановитесь;
-ожидаемый результат каждого шага проверяйте до следующего действия.
+На компьютере разработчика нужны Windows x64, Git, Node.js 24.x с npm и Python 3.
+Python используется существующим тестом для независимого чтения ZIP. Если инструмента нет,
+установите его до продолжения; другу эти инструменты не нужны.
+Используйте рабочую копию проекта с проверяемыми изменениями этой инструкции и сборщика.
+Команды собирают текущее содержимое файлов, включая локальные изменения; не переключайте ветку и не удаляйте чужую работу.
 
-Откройте новое окно PowerShell без transcript, отладки и записи экрана. Укажите путь к подготовленному ZIP.
+Все дальнейшие блоки выполняйте сверху вниз в одном окне PowerShell без transcript, отладки и записи экрана.
+При любой ошибке остановитесь и проверьте результат, прежде чем продолжать.
+Путь к проекту вводится в консоли, остальные рабочие пути создаются автоматически.
 
 ```powershell
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
-$zip = Read-Host 'Полный путь к ZIP'
+$env:NPM_CONFIG_UPDATE_NOTIFIER = 'false'
+$env:WRANGLER_SEND_METRICS = 'false'
+$env:WRANGLER_WRITE_LOGS = 'false'
+$env:NO_UPDATE_NOTIFIER = '1'
+$repo = (Read-Host 'Полный путь к рабочей копии FinanceManager').Trim()
+Set-Location -LiteralPath $repo
+$repo = (Get-Location).Path
+if (!(Test-Path 'package-lock.json') -or !(Test-Path 'tools\family-installer\release.ts')) { throw 'Открыта не папка проекта' }
+git branch --show-current
+if ($LASTEXITCODE -ne 0) { throw 'Не удалось определить ветку' }
+git rev-parse HEAD
+if ($LASTEXITCODE -ne 0) { throw 'Не удалось определить commit' }
+node --version
+if ($LASTEXITCODE -ne 0) { throw 'Нужен Node.js 24.x' }
+npm.cmd --version
+if ($LASTEXITCODE -ne 0) { throw 'Нужен npm' }
+python --version
+if ($LASTEXITCODE -ne 0) { throw 'Нужен Python 3 для проверки ZIP' }
+```
+
+**Ожидается:** показаны выбранные ветка и commit, Node 24.x, версии npm и Python 3.
+Ниже закреплены Node **24.13.0**, Wrangler **4.133.0** и релиз **1** из `tools/family-installer/release.ts`.
+Это версии универсального пакета, а не данные семьи. При изменении закреплённых версий сначала обновите этот порядок сборки.
+
+Подготовка скачивает публичные зависимости из npm и официальный Node с `nodejs.org`.
+Она создаёт новые файлы под `work/` и заменяет корневой `node_modules` зависимостями из текущего lock-файла.
+Cloudflare, Telegram и их credentials не используются; существующие установки не меняются.
+Если команды выполняет помощник, перед этими скачиваниями получите отдельное разрешение.
+
+Создайте свежий каталог и установите зависимости проекта и Windows toolchain — набор файлов для включения в ZIP:
+
+```powershell
+$run = Join-Path $repo ('work\family-build-' + [guid]::NewGuid().ToString('N'))
+$toolchain = Join-Path $run 'windows-toolchain'
+$output = Join-Path $run 'releases'
+New-Item -ItemType Directory -Path $toolchain -Force | Out-Null
+npm.cmd ci --no-audit --no-fund
+if ($LASTEXITCODE -ne 0) { throw 'Не установлены зависимости проекта' }
+Copy-Item 'package.json', 'package-lock.json' $toolchain
+npm.cmd ci --prefix $toolchain --os=win32 --cpu=x64 --ignore-scripts --no-audit --no-fund
+if ($LASTEXITCODE -ne 0) { throw 'Не подготовлены Windows-зависимости' }
+```
+
+Скачайте официальный Windows x64 Node, проверьте SHA-256 и добавьте runtime в toolchain:
+
+```powershell
+$nodeZip = Join-Path $run 'node-v24.13.0-win-x64.zip'
+Invoke-WebRequest -UseBasicParsing 'https://nodejs.org/dist/v24.13.0/node-v24.13.0-win-x64.zip' -OutFile $nodeZip
+$nodeZipHash = (Get-FileHash -LiteralPath $nodeZip -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($nodeZipHash -ne 'ca2742695be8de44027d71b3f53a4bdb36009b95575fe1ae6f7f0b5ce091cb88') { throw 'Не совпал SHA256 архива Node' }
+$nodeExtracted = Join-Path $run 'node-extracted'
+Expand-Archive -LiteralPath $nodeZip -DestinationPath $nodeExtracted
+$runtime = Join-Path $toolchain 'runtime'
+New-Item -ItemType Directory -Path $runtime | Out-Null
+Copy-Item (Join-Path $nodeExtracted 'node-v24.13.0-win-x64\node.exe') $runtime
+Copy-Item (Join-Path $nodeExtracted 'node-v24.13.0-win-x64\LICENSE') $runtime
+$nodeExeHash = (Get-FileHash -LiteralPath (Join-Path $runtime 'node.exe') -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($nodeExeHash -ne 'd14ba95cdce1ef7dc9ad3ac74949ca5db38b27378ee30f30a23cf26f9e875a11') { throw 'Не совпал SHA256 node.exe' }
+```
+
+**Ожидается:** обе проверки SHA-256 прошли. В `$toolchain` есть `runtime\node.exe`, `runtime\LICENSE`
+и `node_modules\wrangler`. Прежние toolchain и результаты сборок не перезаписываются.
+
+Проверьте упаковщик и выполните сборку из корня проекта:
+
+```powershell
+npm.cmd run installer:check
+if ($LASTEXITCODE -ne 0) { throw 'Ошибка типов упаковщика' }
+npm.cmd run installer:test
+if ($LASTEXITCODE -ne 0) { throw 'Тесты упаковщика не прошли' }
+npm.cmd run release:family -- $toolchain $output
+if ($LASTEXITCODE -ne 0) { throw 'Сборка релиза не прошла' }
+$release = Join-Path $output 'family-finance-1-windows-x64'
+$zip = Join-Path $release 'family-finance-1-windows-x64.zip'
+if (!(Test-Path -LiteralPath $zip -PathType Leaf)) { throw 'Не найден готовый ZIP' }
+python -c "import sys,zipfile; z=zipfile.ZipFile(sys.argv[1]); assert z.testzip() is None; print('ZIP CRC OK')" $zip
+if ($LASTEXITCODE -ne 0) { throw 'Повреждён ZIP' }
+Write-Host ('ZIP для установки: ' + $zip)
+```
+
+**Ожидается:** проверки проходят, сборщик выводит `Release 1: … files; …zip`, затем появляется `ZIP CRC OK`.
+В `$release` находятся ZIP и каталог `package/`. Сборщик сам ничего не скачивает: ему нужны подготовленный toolchain
+и выходной каталог вне toolchain, поэтому выше они созданы соседними каталогами.
+Он проверяет закреплённый Node, версии зависимостей и состав пакета; существующий каталог релиза не заменяет.
+
+Сохраняйте исходный ZIP без данных установки. Для нового прохода сборки начните шаг 0 заново в новом окне:
+случайный `$run` исключит конфликт с прежним результатом. Завершённые приёмки Task 2, Task 4 и Task 5 повторно не отмечайте.
+
+## 1. Распаковать ZIP
+
+Продолжайте в том же PowerShell: `$zip` уже содержит путь к только что собранному архиву.
+Распакуйте именно ZIP в новый случайный каталог, не используйте каталог `package/` сборщика как рабочую установку:
+
+```powershell
 $instanceRoot = Join-Path $env:LOCALAPPDATA 'FamilyFinanceBot'
 $packageRoot = Join-Path $instanceRoot ('release-1-' + [guid]::NewGuid().ToString('N'))
 New-Item -ItemType Directory -Path $packageRoot -Force | Out-Null
 Expand-Archive -LiteralPath $zip -DestinationPath $packageRoot
 Set-Location -LiteralPath $packageRoot
+foreach ($document in @('FAMILY_INSTALLATION.md', 'FAMILY_INSTALLATION_DEVELOPER_ACCOUNT.md')) {
+  $sourceHash = (Get-FileHash -LiteralPath (Join-Path $repo ('docs\deployment\' + $document)) -Algorithm SHA256).Hash
+  $packagedHash = (Get-FileHash -LiteralPath (Join-Path $packageRoot $document) -Algorithm SHA256).Hash
+  if ($sourceHash -ne $packagedHash) { throw ('В ZIP другая инструкция: ' + $document) }
+}
 ```
+
+**Ожидается:** распаковка прошла, обе инструкции из архива совпадают с текущими файлами проекта.
 
 Настройте пути и окружение для команд ниже:
 
@@ -59,7 +163,7 @@ $OutputEncoding = [Console]::OutputEncoding
 ```
 
 **Ожидается:** архив распакован в новый случайный каталог разработчика. В нём есть `worker/`, `migrations/`,
-`runtime/`, `wrangler/` и `wrangler.template.json`. Здесь не нужны `npm install`, Git или сборка Worker.
+`runtime/`, `wrangler/` и `wrangler.template.json`. Дальнейшие команды используют инструменты из ZIP; повторно устанавливать зависимости или собирать Worker не нужно.
 Если распаковка не удалась, удалять облачные ресурсы не нужно: получите и распакуйте проверенный архив заново.
 
 Перед авторизацией исключите переменные, которые могут подставить чужой аккаунт, профиль или credentials.
