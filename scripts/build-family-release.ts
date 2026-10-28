@@ -29,6 +29,8 @@ export async function buildFamilyRelease(toolchainPath: string, outputPath: stri
     await writeFile(path.join(stagingPackagesFolder, "wrangler.template.json"), JSON.stringify(configTemplate(), null, 2) + "\n");
     await cp(path.join(repository, "tools/family-installer/assets/RELEASE_NOTES.ru.md"), path.join(stagingPackagesFolder, "RELEASE_NOTES.ru.md"));
     await cp(path.join(repository, "docs/deployment/FAMILY_INSTALLATION.md"), path.join(stagingPackagesFolder, "FAMILY_INSTALLATION.md"));
+    await cp(path.join(repository, "docs/deployment/FAMILY_INSTALLATION_DEVELOPER_ACCOUNT.md"),
+      path.join(stagingPackagesFolder, "FAMILY_INSTALLATION_DEVELOPER_ACCOUNT.md"));
     // No source wrangler.jsonc, env files, plugins, or owner-side application compilation.
     const workerBuild = await build({
       absWorkingDir: repository,

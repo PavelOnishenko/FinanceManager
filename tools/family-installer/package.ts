@@ -5,6 +5,7 @@ import { COMPATIBILITY_DATE, RELEASE_VERSION } from "./release";
 
 export const FIXED_FILES = [
   "FAMILY_INSTALLATION.md",
+  "FAMILY_INSTALLATION_DEVELOPER_ACCOUNT.md",
   "worker/worker.js",
   "wrangler.template.json",
   "runtime/node.exe",
