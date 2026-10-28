@@ -31,7 +31,16 @@ wrangler/node_modules/...
 THIRD_PARTY_NOTICES.txt
 RELEASE_NOTES.ru.md
 FAMILY_INSTALLATION.md
+FAMILY_INSTALLATION_DEVELOPER_ACCOUNT.md
 ```
+
+The ZIP includes two complete instructions: `FAMILY_INSTALLATION.md` for the recipient's account and computer,
+and `FAMILY_INSTALLATION_DEVELOPER_ACCOUNT.md` for a new, separate instance in the developer's account.
+Choose one before starting. Both use a universal package; instance records and secrets remain outside Git and the original ZIP.
+The developer-account instructions include one local PowerShell block that saves the instance details and configuration
+in a fresh random records directory. It makes no network calls and never replaces another installation's record.
+For this documentation change, verify both documents in the extracted archive, the local save block with sample values,
+and the existing package checks. Completed Task 4 and Task 5 records remain unchanged; a new live result requires a new installation check.
 
 The template contains placeholders, `DB`, `migrations_dir`, `no_bundle: true`, and
 `APP_RELEASE_VERSION: "1"`. The operator copies the template to `wrangler.instance.json`, fills the account,
